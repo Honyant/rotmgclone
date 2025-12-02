@@ -46,6 +46,9 @@ export class Game {
   // Item tooltip
   private itemTooltip: HTMLElement;
 
+  // Controls overlay
+  private controlsOverlay: HTMLElement;
+
   constructor() {
     const gameContainer = document.getElementById('game-container')!;
 
@@ -60,6 +63,7 @@ export class Game {
     this.lootPopup = document.getElementById('loot-popup')!;
     this.lootItems = document.getElementById('loot-items')!;
     this.itemTooltip = document.getElementById('item-tooltip')!;
+    this.controlsOverlay = document.getElementById('controls-overlay')!;
 
     // Determine WebSocket URL
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -706,6 +710,12 @@ export class Game {
       // Render with interpolation using deltaTime
       this.renderer.render(deltaTime);
       this.updateLootPopup();
+
+      // Show/hide controls overlay when H is held
+      this.controlsOverlay.classList.toggle('hidden', !this.input.isKeyDown('h'));
+    } else {
+      // Hide controls when not playing
+      this.controlsOverlay.classList.add('hidden');
     }
 
     requestAnimationFrame(() => this.gameLoop());
