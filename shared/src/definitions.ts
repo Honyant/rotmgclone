@@ -783,7 +783,7 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     xpReward: 1000,
     lootTable: [
       { itemId: 'doom_staff', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'demon_blade', chance: 1.0, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'demon_blade', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'doom_bow', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'omnipotence_ring', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'power_ring', chance: 0.5, minQuantity: 1, maxQuantity: 1 },

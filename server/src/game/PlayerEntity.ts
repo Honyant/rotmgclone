@@ -58,9 +58,8 @@ export class PlayerEntity extends Entity implements Player {
     this.classId = character.classId;
     this.level = character.level;
     this.exp = character.exp;
-    // GOD MODE: 1 million HP
-    this.hp = 1000000;
-    this.maxHp = 1000000;
+    this.hp = character.hp;
+    this.maxHp = character.maxHp;
     this.mp = character.mp;
     this.maxMp = character.maxMp;
     this.attack = character.attack;
