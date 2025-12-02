@@ -55,19 +55,25 @@ export class GameMap {
   }
 
   findSpawnPosition(): Vec2 {
-    // Find a random walkable spawn position
-    for (let attempts = 0; attempts < 100; attempts++) {
-      const x = Math.random() * this.width;
-      const y = Math.random() * this.height;
-      if (this.getTile(x, y) === TileType.SPAWN) {
-        return { x, y };
+    // First, collect all SPAWN tiles
+    const spawnTiles: Vec2[] = [];
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        if (this.getTile(x, y) === TileType.SPAWN) {
+          spawnTiles.push({ x: x + 0.5, y: y + 0.5 });
+        }
       }
     }
 
-    // Fallback: find any floor tile
+    // If we found spawn tiles, pick a random one
+    if (spawnTiles.length > 0) {
+      return spawnTiles[Math.floor(Math.random() * spawnTiles.length)];
+    }
+
+    // Fallback: find any regular floor tile (not BOSS_FLOOR)
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (this.isWalkable(x, y)) {
+        if (this.getTile(x, y) === TileType.FLOOR) {
           return { x: x + 0.5, y: y + 0.5 };
         }
       }

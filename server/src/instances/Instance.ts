@@ -125,14 +125,16 @@ export class Instance {
 
   private healPlayer(player: PlayerEntity, deltaTime: number): void {
     // Heal 20% HP and MP per second in nexus
-    const hpRegen = player.maxHp * 0.2 * deltaTime;
-    const mpRegen = player.maxMp * 0.2 * deltaTime;
+    const effectiveMaxHp = player.getEffectiveMaxHp();
+    const effectiveMaxMp = player.getEffectiveMaxMp();
+    const hpRegen = effectiveMaxHp * 0.2 * deltaTime;
+    const mpRegen = effectiveMaxMp * 0.2 * deltaTime;
 
-    if (player.hp < player.maxHp) {
-      player.hp = Math.min(player.maxHp, player.hp + hpRegen);
+    if (player.hp < effectiveMaxHp) {
+      player.hp = Math.min(effectiveMaxHp, player.hp + hpRegen);
     }
-    if (player.mp < player.maxMp) {
-      player.mp = Math.min(player.maxMp, player.mp + mpRegen);
+    if (player.mp < effectiveMaxMp) {
+      player.mp = Math.min(effectiveMaxMp, player.mp + mpRegen);
     }
   }
 
@@ -443,9 +445,9 @@ export class Instance {
       classId: p.classId,
       position: { ...p.position },
       hp: p.hp,
-      maxHp: p.maxHp,
+      maxHp: p.getEffectiveMaxHp(),
       mp: p.mp,
-      maxMp: p.maxMp,
+      maxMp: p.getEffectiveMaxMp(),
       level: p.level,
       exp: p.exp,
       attack: p.attack,
@@ -776,7 +778,7 @@ export class Instance {
 
       case 'heal': {
         // Heal ability - restore HP
-        player.hp = Math.min(player.maxHp, player.hp + effect.amount);
+        player.hp = Math.min(player.getEffectiveMaxHp(), player.hp + effect.amount);
 
         // Broadcast ability effect for visual
         this.broadcastToNearby(player.position, {

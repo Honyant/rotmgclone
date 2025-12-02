@@ -108,21 +108,23 @@ export class PlayerEntity extends Entity implements Player {
     }
 
     // HP regeneration (vitality based)
-    if (this.hp < this.maxHp) {
+    const effectiveMaxHp = this.getEffectiveMaxHp();
+    if (this.hp < effectiveMaxHp) {
       this.hpRegenAccum += (1 + this.vitality * 0.12) * deltaTime;
       if (this.hpRegenAccum >= 1) {
         const regen = Math.floor(this.hpRegenAccum);
-        this.hp = Math.min(this.maxHp, this.hp + regen);
+        this.hp = Math.min(effectiveMaxHp, this.hp + regen);
         this.hpRegenAccum -= regen;
       }
     }
 
     // MP regeneration (wisdom based)
-    if (this.mp < this.maxMp) {
+    const effectiveMaxMp = this.getEffectiveMaxMp();
+    if (this.mp < effectiveMaxMp) {
       this.mpRegenAccum += (0.5 + this.wisdom * 0.06) * deltaTime;
       if (this.mpRegenAccum >= 1) {
         const regen = Math.floor(this.mpRegenAccum);
-        this.mp = Math.min(this.maxMp, this.mp + regen);
+        this.mp = Math.min(effectiveMaxMp, this.mp + regen);
         this.mpRegenAccum -= regen;
       }
     }
@@ -202,6 +204,28 @@ export class PlayerEntity extends Entity implements Player {
     }
 
     return defense;
+  }
+
+  getEffectiveMaxHp(): number {
+    let maxHp = this.maxHp;
+
+    const ringId = this.equipment[3];
+    if (ringId && RINGS[ringId]?.stats.hp) {
+      maxHp += RINGS[ringId].stats.hp;
+    }
+
+    return maxHp;
+  }
+
+  getEffectiveMaxMp(): number {
+    let maxMp = this.maxMp;
+
+    const ringId = this.equipment[3];
+    if (ringId && RINGS[ringId]?.stats.mp) {
+      maxMp += RINGS[ringId].stats.mp;
+    }
+
+    return maxMp;
   }
 
   calculateDamage(baseDamage: number): number {
