@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: rotmg-server-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/game.db
+    restart: unless-stopped
+
+  # For development, you can also run the client locally with `npm run dev:client`
+  # This compose file mainly provides the server

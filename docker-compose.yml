@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: rotmg-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - game-data:/app/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/game.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    container_name: rotmg-client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  game-data:
+    driver: local
