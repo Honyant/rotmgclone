@@ -399,12 +399,32 @@ export class Game {
     }
 
     slot.style.cursor = 'pointer';
-    slot.addEventListener('click', (e) => {
+
+    // Use pointerdown for more reliable click detection
+    // This fires before mousedown and works better across devices
+    slot.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
       this.handleSlotClick(slotIndex, e.shiftKey);
-    });
-    slot.addEventListener('mousedown', (e) => e.stopPropagation());
-    slot.addEventListener('mouseup', (e) => e.stopPropagation());
+    }, { capture: true });
+
+    // Block all mouse events from propagating to canvas
+    slot.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }, { capture: true });
+    slot.addEventListener('mouseup', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }, { capture: true });
+    slot.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }, { capture: true });
 
     // Hover to show tooltip
     slot.addEventListener('mouseenter', () => {
