@@ -510,6 +510,30 @@ export class SimpleRenderer {
       ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.3 * pulse) + ')';
       ctx.lineWidth = 2;
       ctx.stroke();
+
+      // Draw portal name and interaction hint above portal (counter-rotate to stay upright)
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(this.cameraRotation);
+
+      ctx.font = 'bold 14px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      // Portal name
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(portal.name, 0, -35);
+      ctx.fillText(portal.name, 0, -35);
+
+      // "Press F to enter" hint
+      ctx.font = '12px "VT323", monospace';
+      ctx.fillStyle = '#ffcc00';
+      ctx.strokeText('Press F to enter', 0, -50);
+      ctx.fillText('Press F to enter', 0, -50);
+
+      ctx.restore();
     }
 
     // Draw loots (static)
