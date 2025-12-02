@@ -134,8 +134,8 @@ export class NetworkClient {
     this.send({ type: 'auth', data: { token: `${username}:${password}` } });
   }
 
-  createCharacter(classId: string, name: string): void {
-    this.send({ type: 'createCharacter', data: { classId, name } });
+  createCharacter(classId: string): void {
+    this.send({ type: 'createCharacter', data: { classId } });
   }
 
   selectCharacter(characterId: string): void {

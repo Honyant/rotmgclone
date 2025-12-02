@@ -79,7 +79,7 @@ export type ClientMessage =
   | { type: 'enterPortal'; data: { portalId: string } }
   | { type: 'returnToNexus' }
   | { type: 'auth'; data: { token: string } }
-  | { type: 'createCharacter'; data: { classId: string; name: string } }
+  | { type: 'createCharacter'; data: { classId: string } }
   | { type: 'selectCharacter'; data: { characterId: string } }
   | { type: 'chat'; data: { message: string } };
 

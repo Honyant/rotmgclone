@@ -220,16 +220,16 @@ export class GameServer {
           level: c.level,
           alive: c.alive,
         })),
-        maxCharacters: 3,
+        maxCharacters: 2,
       },
     });
   }
 
-  private handleCreateCharacter(
+  private async handleCreateCharacter(
     ws: WebSocket,
     session: ClientSession,
-    data: { classId: string; name: string }
-  ): void {
+    data: { classId: string }
+  ): Promise<void> {
     if (!session.accountId) {
       this.send(ws, { type: 'error', data: { message: 'Not authenticated' } });
       return;
@@ -240,7 +240,21 @@ export class GameServer {
       return;
     }
 
-    const character = this.database.createCharacter(session.accountId, data.name, data.classId);
+    // Check character limit
+    const existingCharacters = this.database.getAliveCharactersByAccount(session.accountId);
+    if (existingCharacters.length >= 2) {
+      this.send(ws, { type: 'error', data: { message: 'Maximum 2 characters allowed' } });
+      return;
+    }
+
+    // Get account to use username as character name
+    const account = await this.database.getAccount(session.accountId);
+    if (!account) {
+      this.send(ws, { type: 'error', data: { message: 'Account not found' } });
+      return;
+    }
+
+    const character = this.database.createCharacter(session.accountId, account.username, data.classId);
     if (!character) {
       this.send(ws, { type: 'error', data: { message: 'Failed to create character' } });
       return;
@@ -258,7 +272,7 @@ export class GameServer {
           level: c.level,
           alive: c.alive,
         })),
-        maxCharacters: 3,
+        maxCharacters: 2,
       },
     });
   }
@@ -630,7 +644,7 @@ export class GameServer {
                 level: c.level,
                 alive: c.alive,
               })),
-              maxCharacters: 3,
+              maxCharacters: 2,
             },
           });
         }

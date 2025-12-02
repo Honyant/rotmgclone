@@ -6,8 +6,6 @@ import type {
 import { ENEMIES, ITEMS } from '@rotmg/shared';
 
 const TILE_SIZE = 32;
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
 
 const LOOT_COLORS: Record<number, string> = {
   0: '#8B4513',
@@ -79,8 +77,6 @@ export class SimpleRenderer {
 
   constructor(container: HTMLElement) {
     this.canvas = document.createElement('canvas');
-    this.canvas.width = CANVAS_WIDTH;
-    this.canvas.height = CANVAS_HEIGHT;
     this.canvas.style.cursor = 'crosshair';
     container.appendChild(this.canvas);
 
@@ -88,11 +84,22 @@ export class SimpleRenderer {
     if (!ctx) throw new Error('Failed to get 2D context');
     this.ctx = ctx;
 
+    // Set initial size to fill window
+    this.resizeCanvas();
+
+    // Handle window resize
+    window.addEventListener('resize', () => this.resizeCanvas());
+
     // Get minimap canvas
     this.minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
     if (this.minimapCanvas) {
       this.minimapCtx = this.minimapCanvas.getContext('2d');
     }
+  }
+
+  private resizeCanvas(): void {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
   }
 
   async waitForReady(): Promise<void> {
@@ -105,6 +112,30 @@ export class SimpleRenderer {
 
   setCameraRotation(rotation: number): void {
     this.cameraRotation = rotation;
+  }
+
+  clearCanvas(): void {
+    // Clear main canvas to background color
+    this.ctx.fillStyle = '#1a1a2e';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Clear interpolation state
+    this.entityPositions.clear();
+    this.predictedPos = null;
+    this.lastSnapshot = null;
+
+    // Clear map data
+    this.mapCanvas = null;
+    this.mapTiles = [];
+    this.mapWidth = 0;
+    this.mapHeight = 0;
+
+    // Clear minimap
+    if (this.minimapCtx && this.minimapCanvas) {
+      this.minimapCtx.fillStyle = '#0a0a0a';
+      this.minimapCtx.fillRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
+    }
+    this.minimapCache = null;
   }
 
   setMapData(width: number, height: number, tiles: number[]): void {
@@ -370,7 +401,7 @@ export class SimpleRenderer {
 
     // Clear canvas
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // Find local player for camera - use predicted position for instant response
     let playerWorldX = 0;
@@ -384,19 +415,19 @@ export class SimpleRenderer {
     ctx.save();
 
     // Apply rotation around canvas center (player position)
-    ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
     ctx.rotate(-this.cameraRotation);
-    ctx.translate(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    ctx.translate(-this.canvas.width / 2, -this.canvas.height / 2);
 
     // Now set camera offset based on player world position
-    this.cameraX = playerWorldX - CANVAS_WIDTH / 2;
-    this.cameraY = playerWorldY - CANVAS_HEIGHT / 2;
+    this.cameraX = playerWorldX - this.canvas.width / 2;
+    this.cameraY = playerWorldY - this.canvas.height / 2;
 
     // Draw map from offscreen canvas (need to draw larger area when rotated)
     if (this.mapCanvas) {
       // When rotated, we need to draw a larger area to cover corners
-      const diagonal = Math.sqrt(CANVAS_WIDTH * CANVAS_WIDTH + CANVAS_HEIGHT * CANVAS_HEIGHT);
-      const extraPadding = (diagonal - Math.min(CANVAS_WIDTH, CANVAS_HEIGHT)) / 2;
+      const diagonal = Math.sqrt(this.canvas.width * this.canvas.width + this.canvas.height * this.canvas.height);
+      const extraPadding = (diagonal - Math.min(this.canvas.width, this.canvas.height)) / 2;
 
       const srcX = Math.max(0, this.cameraX - extraPadding);
       const srcY = Math.max(0, this.cameraY - extraPadding);
@@ -406,8 +437,8 @@ export class SimpleRenderer {
       const maxSrcX = this.mapWidth * TILE_SIZE;
       const maxSrcY = this.mapHeight * TILE_SIZE;
 
-      const drawWidth = Math.min(CANVAS_WIDTH + extraPadding * 2, maxSrcX - srcX);
-      const drawHeight = Math.min(CANVAS_HEIGHT + extraPadding * 2, maxSrcY - srcY);
+      const drawWidth = Math.min(this.canvas.width + extraPadding * 2, maxSrcX - srcX);
+      const drawHeight = Math.min(this.canvas.height + extraPadding * 2, maxSrcY - srcY);
 
       if (drawWidth > 0 && drawHeight > 0) {
         ctx.drawImage(
@@ -679,8 +710,8 @@ export class SimpleRenderer {
     // Player is always at center of screen (before rotation)
     // Return canvas center since that's where the local player is rendered
     return {
-      x: CANVAS_WIDTH / 2,
-      y: CANVAS_HEIGHT / 2,
+      x: this.canvas.width / 2,
+      y: this.canvas.height / 2,
     };
   }
 
@@ -701,8 +732,8 @@ export class SimpleRenderer {
   playHelixParticles(): void {
     this.helixParticles = [];
 
-    const centerX = CANVAS_WIDTH / 2;
-    const centerY = CANVAS_HEIGHT / 2;
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
     const numParticles = 60;
     const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#FF85A2', '#A29BFE'];
 
@@ -840,8 +871,8 @@ export class SimpleRenderer {
     });
 
     // Create buff activation particles at player position (center of screen for local player)
-    const centerX = CANVAS_WIDTH / 2;
-    const centerY = CANVAS_HEIGHT / 2;
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
 
     // Upward spiraling particles
     const colors = stat === 'speed' ? ['#4ECDC4', '#45B7D1', '#96CEB4'] : ['#FFD700', '#FFA500', '#FF6B6B'];
@@ -954,8 +985,8 @@ export class SimpleRenderer {
   // Draw pulsing glow around player center when buff is active
   private drawBuffGlow(): void {
     const ctx = this.ctx;
-    const centerX = CANVAS_WIDTH / 2;
-    const centerY = CANVAS_HEIGHT / 2;
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
 
     // Pulsing effect based on time
     const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 150);

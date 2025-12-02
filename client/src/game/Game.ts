@@ -30,6 +30,7 @@ export class Game {
   private characterList: CharacterListData | null = null;
 
   // UI Elements
+  private gameContainer: HTMLElement;
   private loginScreen: HTMLElement;
   private characterScreen: HTMLElement;
   private statsPanel: HTMLElement;
@@ -57,9 +58,9 @@ export class Game {
   private deathScreenKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor() {
-    const gameContainer = document.getElementById('game-container')!;
+    this.gameContainer = document.getElementById('game-container')!;
 
-    this.renderer = new SimpleRenderer(gameContainer);
+    this.renderer = new SimpleRenderer(this.gameContainer);
 
     // Get UI elements
     this.loginScreen = document.getElementById('login-screen')!;
@@ -102,6 +103,22 @@ export class Game {
     this.network.setHandlers({
       onConnect: () => {
         console.log('Connected to server');
+        // Try auto-login with saved credentials
+        const saved = localStorage.getItem('rotmg_credentials');
+        if (saved) {
+          try {
+            const { username, password } = JSON.parse(saved);
+            if (username && password) {
+              // Pre-fill inputs for reference
+              (document.getElementById('username-input') as HTMLInputElement).value = username;
+              (document.getElementById('password-input') as HTMLInputElement).value = password;
+              this.network.authenticate(username, password);
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem('rotmg_credentials');
+          }
+        }
         this.setState('login');
       },
 
@@ -113,8 +130,16 @@ export class Game {
       onAuthResult: (success, accountId, error) => {
         if (success) {
           console.log('Authenticated as', accountId);
+          // Save credentials for auto-login
+          const username = (document.getElementById('username-input') as HTMLInputElement).value;
+          const password = (document.getElementById('password-input') as HTMLInputElement).value;
+          if (username && password) {
+            localStorage.setItem('rotmg_credentials', JSON.stringify({ username, password }));
+          }
         } else {
           alert('Login failed: ' + error);
+          // Clear saved credentials on failure
+          localStorage.removeItem('rotmg_credentials');
         }
       },
 
@@ -176,6 +201,18 @@ export class Game {
   }
 
   private setupUIHandlers(): void {
+    // Prevent browser zoom with Ctrl+/- and Ctrl+scroll
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0')) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
     // Login
     document.getElementById('login-btn')!.addEventListener('click', () => {
       const username = (document.getElementById('username-input') as HTMLInputElement).value;
@@ -188,12 +225,24 @@ export class Game {
 
     // Character creation
     document.getElementById('create-char-btn')!.addEventListener('click', () => {
-      const name = (document.getElementById('char-name-input') as HTMLInputElement).value;
       const classId = (document.getElementById('char-class-select') as HTMLSelectElement).value;
+      this.network.createCharacter(classId);
+    });
 
-      if (name) {
-        this.network.createCharacter(classId, name);
-      }
+    // Logout
+    document.getElementById('logout-btn')!.addEventListener('click', () => {
+      // Clear saved credentials
+      localStorage.removeItem('rotmg_credentials');
+      this.network.disconnect();
+      this.characterList = null;
+      this.playerId = null;
+      this.lastSnapshot = null;
+      // Clear input fields
+      (document.getElementById('username-input') as HTMLInputElement).value = '';
+      (document.getElementById('password-input') as HTMLInputElement).value = '';
+      this.setState('login');
+      // Reconnect to allow new login
+      setTimeout(() => this.network.connect(), 500);
     });
 
     // Chat
@@ -265,7 +314,10 @@ export class Game {
 
     this.loginScreen.classList.toggle('hidden', newState !== 'login');
     this.characterScreen.classList.toggle('hidden', newState !== 'character_select');
-    // Death screen is shown/hidden separately by showDeathScreen/hideDeathScreen
+
+    // Hide game UI elements when not playing
+    const showGameUI = newState === 'playing';
+    this.gameContainer.classList.toggle('game-ui-hidden', !showGameUI);
   }
 
   private updateCharacterList(): void {
@@ -277,19 +329,29 @@ export class Game {
     for (const char of this.characterList.characters) {
       const item = document.createElement('div');
       item.className = 'character-item';
+      const classColor = char.classId === 'wizard' ? 'class-wizard' :
+                         char.classId === 'warrior' ? 'class-warrior' : 'class-archer';
       item.innerHTML = `
-        <span>${char.name} (${char.classId}) - Level ${char.level}</span>
-        <button class="btn btn-primary">Play</button>
+        <div class="character-info">
+          <div class="character-name">${char.name}</div>
+          <div class="character-class ${classColor}">${char.classId.charAt(0).toUpperCase() + char.classId.slice(1)}</div>
+        </div>
+        <div class="character-level">Lv ${char.level}</div>
       `;
-      item.querySelector('button')!.addEventListener('click', () => {
+      item.addEventListener('click', () => {
         this.network.selectCharacter(char.id);
       });
       listEl.appendChild(item);
     }
 
     if (this.characterList.characters.length === 0) {
-      listEl.innerHTML = '<p style="color: #888;">No characters yet. Create one below!</p>';
+      listEl.innerHTML = '<p class="no-characters">No characters yet. Create one below!</p>';
     }
+
+    // Disable create button if at max characters
+    const createBtn = document.getElementById('create-char-btn') as HTMLButtonElement;
+    const atMaxChars = this.characterList.characters.length >= this.characterList.maxCharacters;
+    createBtn.disabled = atMaxChars;
   }
 
   private updateStatsUI(): void {
@@ -298,8 +360,8 @@ export class Game {
     const localPlayer = this.lastSnapshot.players.find((p) => p.id === this.playerId);
     if (!localPlayer) return;
 
-    document.getElementById('hp-display')!.textContent = `${localPlayer.hp}/${localPlayer.maxHp}`;
-    document.getElementById('mp-display')!.textContent = `${localPlayer.mp}/${localPlayer.maxMp}`;
+    document.getElementById('hp-display')!.textContent = `${Math.round(localPlayer.hp)}/${Math.round(localPlayer.maxHp)}`;
+    document.getElementById('mp-display')!.textContent = `${Math.round(localPlayer.mp)}/${Math.round(localPlayer.maxMp)}`;
     document.getElementById('level-display')!.textContent = String(localPlayer.level);
     document.getElementById('instance-display')!.textContent = this.lastSnapshot.instanceType;
 
@@ -727,7 +789,14 @@ export class Game {
       }
     }, 500);
 
-    // 3. Enable dismissal after animations complete (~4s)
+    // 3. Clear canvas after background opacity settles (~2s)
+    setTimeout(() => {
+      if (this.deathScreenActive) {
+        this.renderer.clearCanvas();
+      }
+    }, 2000);
+
+    // 4. Enable dismissal after animations complete (~4s)
     setTimeout(() => {
       if (this.deathScreenActive) {
         this.canDismissDeathScreen = true;

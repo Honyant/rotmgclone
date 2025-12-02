@@ -20,17 +20,25 @@
       overflow: hidden;
     }
     #game-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      position: relative;
       height: 100vh;
       width: 100vw;
     }
-    #game-container canvas {
-      border: 2px solid #444;
+    #game-container canvas:not(#minimap) {
+      position: absolute;
+      top: 0;
+      left: 0;
       cursor: crosshair;
       display: block;
+      z-index: 0;
+    }
+    /* Ensure UI screens are above canvas */
+    #login-screen, #character-screen {
+      z-index: 100;
+    }
+    /* Game UI elements above canvas */
+    #ui-overlay, #minimap, #chat-container, #inventory-panel, #loot-popup, #item-tooltip, #controls-overlay {
+      z-index: 10;
     }
     #ui-overlay {
       position: absolute;
@@ -106,80 +114,240 @@
       height: 150px;
       background: rgba(0, 0, 0, 0.7);
       border-radius: 5px;
+      z-index: 10 !important;
     }
-    #login-screen, #character-screen {
+    /* Login Screen */
+    #login-screen {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.9);
-      padding: 30px;
-      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(20, 20, 40, 0.98), rgba(10, 10, 25, 0.98));
+      padding: 40px 50px;
+      border-radius: 15px;
       text-align: center;
-      min-width: 300px;
+      min-width: 380px;
+      border: 2px solid #333;
+      box-shadow: 0 0 50px rgba(74, 144, 217, 0.2), inset 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+    .login-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #ffd700;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 3px 3px 0 #000;
+      letter-spacing: 2px;
+    }
+    .login-subtitle {
+      font-family: 'VT323', monospace;
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 30px;
+    }
+    .login-form {
+      margin-bottom: 20px;
+    }
+    /* Character Select Screen */
+    #character-screen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(145deg, rgba(20, 20, 40, 0.98), rgba(10, 10, 25, 0.98));
+      padding: 30px 40px;
+      border-radius: 15px;
+      text-align: center;
+      min-width: 450px;
+      max-width: 500px;
+      border: 2px solid #333;
+      box-shadow: 0 0 50px rgba(74, 144, 217, 0.2), inset 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+    .screen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #333;
     }
     .screen-title {
       font-family: 'Press Start 2P', cursive;
-      font-size: 20px;
-      margin-bottom: 20px;
+      font-size: 18px;
       color: #ffd700;
       text-shadow: 2px 2px 0 #000;
+      margin: 0;
     }
     .form-group {
       margin-bottom: 15px;
     }
+    .form-group label {
+      display: block;
+      text-align: left;
+      margin-bottom: 5px;
+      color: #888;
+      font-size: 14px;
+    }
     .form-group input, .form-group select {
       width: 100%;
-      padding: 10px;
-      border: 1px solid #444;
-      background: #222;
+      padding: 12px 15px;
+      border: 2px solid #333;
+      background: rgba(30, 30, 50, 0.8);
       color: #fff;
-      border-radius: 5px;
+      border-radius: 8px;
       font-family: 'VT323', monospace;
       font-size: 18px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #4a90d9;
+      box-shadow: 0 0 10px rgba(74, 144, 217, 0.3);
+    }
+    .form-group input::placeholder {
+      color: #555;
     }
     .btn {
-      padding: 10px 20px;
+      padding: 12px 25px;
       border: none;
-      border-radius: 5px;
+      border-radius: 8px;
       cursor: pointer;
       font-family: 'VT323', monospace;
-      font-size: 18px;
+      font-size: 20px;
       margin: 5px;
       text-transform: uppercase;
       letter-spacing: 1px;
+      transition: all 0.2s;
     }
     .btn-primary {
-      background: #4a90d9;
+      background: linear-gradient(145deg, #4a90d9, #357abd);
       color: #fff;
+      box-shadow: 0 4px 15px rgba(74, 144, 217, 0.3);
     }
     .btn-primary:hover {
-      background: #357abd;
+      background: linear-gradient(145deg, #5a9fe8, #4588cc);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(74, 144, 217, 0.4);
     }
     .btn-success {
-      background: #5cb85c;
+      background: linear-gradient(145deg, #5cb85c, #449d44);
       color: #fff;
+      box-shadow: 0 4px 15px rgba(92, 184, 92, 0.3);
     }
     .btn-success:hover {
-      background: #449d44;
+      background: linear-gradient(145deg, #6cc86c, #54ad54);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(92, 184, 92, 0.4);
     }
+    .btn-secondary {
+      background: linear-gradient(145deg, #555, #444);
+      color: #ccc;
+      font-size: 14px;
+      padding: 8px 15px;
+    }
+    .btn-secondary:hover {
+      background: linear-gradient(145deg, #666, #555);
+    }
+    .btn-block {
+      width: 100%;
+      display: block;
+    }
+    /* Character List */
     .character-list {
-      margin: 20px 0;
+      margin: 15px 0;
+      max-height: 200px;
+      overflow-y: auto;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE/Edge */
+    }
+    .character-list::-webkit-scrollbar {
+      display: none; /* Chrome/Safari/Opera */
     }
     .character-item {
-      background: #333;
-      padding: 10px;
-      margin: 5px 0;
-      border-radius: 5px;
+      background: linear-gradient(145deg, rgba(50, 50, 70, 0.8), rgba(40, 40, 60, 0.8));
+      padding: 12px 15px;
+      margin: 8px 0;
+      border-radius: 8px;
       cursor: pointer;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      border: 1px solid #444;
+      transition: all 0.2s;
     }
     .character-item:hover {
-      background: #444;
+      background: linear-gradient(145deg, rgba(60, 60, 80, 0.9), rgba(50, 50, 70, 0.9));
+      border-color: #4a90d9;
+      transform: translateX(5px);
+    }
+    .character-info {
+      text-align: left;
+    }
+    .character-name {
+      font-size: 18px;
+      color: #fff;
+      font-weight: bold;
+    }
+    .character-class {
+      font-size: 14px;
+      color: #888;
+    }
+    .character-level {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 14px;
+      color: #ffd700;
+    }
+    /* Create Character Section */
+    .create-section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #333;
+    }
+    .create-section-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 15px;
+    }
+    .class-info-box {
+      margin-top: 15px;
+      background: rgba(30, 30, 50, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .class-info-box strong {
+      color: #888;
+    }
+    .class-wizard { color: #9966ff; }
+    .class-warrior { color: #ff6666; }
+    .class-archer { color: #66cc66; }
+    /* No characters message */
+    .no-characters {
+      color: #666;
+      padding: 20px;
+      font-style: italic;
+    }
+    /* Disabled button */
+    .btn:disabled {
+      background: #333 !important;
+      color: #666 !important;
+      cursor: not-allowed;
+      box-shadow: none !important;
+      transform: none !important;
     }
     .hidden {
+      display: none !important;
+    }
+    /* Game UI visibility */
+    .game-ui-hidden #ui-overlay,
+    .game-ui-hidden #minimap,
+    .game-ui-hidden #chat-container,
+    .game-ui-hidden #inventory-panel,
+    .game-ui-hidden #loot-popup,
+    .game-ui-hidden #item-tooltip,
+    .game-ui-hidden #controls-overlay {
       display: none !important;
     }
     #inventory-panel {
@@ -518,7 +686,7 @@
     </div>
   </div>
 
-  <div id="game-container">
+  <div id="game-container" class="game-ui-hidden">
     <!-- PixiJS will create its canvas here -->
 
     <div id="ui-overlay">
@@ -590,44 +758,50 @@
       <div class="loot-close-hint">Click item to pick up | Walk away to close</div>
     </div>
 
-    <div id="login-screen">
-      <div class="screen-title">RotMG Clone</div>
-      <div style="margin-bottom: 15px; font-size: 12px; color: #aaa; text-align: left; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;">
-        A browser-based roguelike MMO inspired by Realm of the Mad God. Explore dungeons, defeat bosses, and collect loot. Death is permanent! Hold H for controls.
+    <div id="login-screen" class="hidden">
+      <div class="login-title">RotMG</div>
+      <div class="login-subtitle">Realm of the Mad God Clone</div>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="username-input">Username</label>
+          <input type="text" id="username-input" placeholder="Enter username" />
+        </div>
+        <div class="form-group">
+          <label for="password-input">Password</label>
+          <input type="password" id="password-input" placeholder="Enter password" />
+        </div>
+        <button class="btn btn-primary btn-block" id="login-btn">Login / Register</button>
       </div>
-      <div class="form-group">
-        <input type="text" id="username-input" placeholder="Username" />
-      </div>
-      <div class="form-group">
-        <input type="password" id="password-input" placeholder="Password" />
-      </div>
-      <button class="btn btn-primary" id="login-btn">Login / Register</button>
-      <div style="margin-top: 10px; font-size: 12px; color: #888;">
+      <div style="font-size: 12px; color: #666; margin-top: 10px;">
         New accounts are created automatically
+      </div>
+      <div style="margin-top: 20px; font-size: 11px; color: #555; line-height: 1.6;">
+        Explore dungeons, defeat bosses, collect loot. Death is permanent!
       </div>
     </div>
 
     <div id="character-screen" class="hidden">
-      <div class="screen-title">Select Character</div>
+      <div class="screen-header">
+        <div class="screen-title">Characters</div>
+        <button class="btn btn-secondary" id="logout-btn">Logout</button>
+      </div>
       <div class="character-list" id="character-list"></div>
-      <hr style="border-color: #444; margin: 20px 0;" />
-      <div class="screen-title" style="font-size: 18px;">Create New Character</div>
-      <div class="form-group">
-        <input type="text" id="char-name-input" placeholder="Character Name" />
-      </div>
-      <div class="form-group">
-        <select id="char-class-select">
-          <option value="wizard">Wizard - High damage, low defense</option>
-          <option value="warrior">Warrior - High defense, melee</option>
-          <option value="archer">Archer - Ranged, balanced</option>
-        </select>
-      </div>
-      <button class="btn btn-success" id="create-char-btn">Create Character</button>
-      <div style="margin-top: 15px; font-size: 11px; color: #666; text-align: left; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 5px;">
-        <strong style="color: #888;">Class Info:</strong><br>
-        <span style="color: #9966ff;">Wizard</span> - Spell bomb ability, high magic damage<br>
-        <span style="color: #ff6666;">Warrior</span> - Berserk buff ability, tanky melee<br>
-        <span style="color: #66cc66;">Archer</span> - Piercing arrows, balanced range
+      <div class="create-section">
+        <div class="create-section-title">Create New</div>
+        <div class="form-group">
+          <select id="char-class-select">
+            <option value="wizard">Wizard - High damage, low defense</option>
+            <option value="warrior">Warrior - High defense, melee</option>
+            <option value="archer">Archer - Ranged, balanced</option>
+          </select>
+        </div>
+        <button class="btn btn-success" id="create-char-btn">Create Character</button>
+        <div class="class-info-box">
+          <strong>Class Info:</strong><br>
+          <span class="class-wizard">Wizard</span> - Spell bomb ability, high magic damage<br>
+          <span class="class-warrior">Warrior</span> - Berserk buff ability, tanky melee<br>
+          <span class="class-archer">Archer</span> - Piercing arrows, balanced range
+        </div>
       </div>
     </div>
   </div>
