@@ -11,6 +11,7 @@ import {
   MAX_LEVEL,
   PLAYER_RADIUS,
   Character,
+  PlayerDeathStats,
 } from '@rotmg/shared';
 import { Entity, normalizeVec2 } from './Entity.js';
 import { Instance } from '../instances/Instance.js';
@@ -49,6 +50,16 @@ export class PlayerEntity extends Entity implements Player {
 
   // Active buffs: { stat: string, amount: number, endTime: number }
   private activeBuffs: { stat: string; amount: number; endTime: number }[] = [];
+
+  // Session statistics (tracked for death screen)
+  sessionStartTime: number = Date.now();
+  totalXpGained: number = 0;
+  enemiesKilled: number = 0;
+  damageDealt: number = 0;
+  damageTaken: number = 0;
+  shotsFired: number = 0;
+  abilitiesUsed: number = 0;
+  dungeonsClearedCount: number = 0;
 
   constructor(character: Character, accountId: string) {
     super({ x: 0, y: 0 }, PLAYER_RADIUS, character.id);
@@ -240,6 +251,7 @@ export class PlayerEntity extends Entity implements Player {
     const damage = Math.max(Math.floor(rawDamage * 0.15), rawDamage - defense);
     this.hp = Math.max(0, this.hp - damage);
     this.lastHitTime = Date.now();
+    this.damageTaken += damage;
     return damage;
   }
 
@@ -247,6 +259,7 @@ export class PlayerEntity extends Entity implements Player {
     if (this.level >= MAX_LEVEL) return false;
 
     this.exp += amount;
+    this.totalXpGained += amount;
     const expNeeded = getExpForLevel(this.level + 1);
 
     if (this.exp >= expNeeded) {
@@ -314,5 +327,23 @@ export class PlayerEntity extends Entity implements Player {
     if (emptySlot === -1) return false;
     this.inventory[emptySlot] = itemId;
     return true;
+  }
+
+  getDeathStats(killedBy: string): PlayerDeathStats {
+    const cls = CLASSES[this.classId];
+    return {
+      characterName: this.name,
+      className: cls?.name || this.classId,
+      level: this.level,
+      totalXp: this.totalXpGained,
+      enemiesKilled: this.enemiesKilled,
+      damageDealt: this.damageDealt,
+      damageTaken: this.damageTaken,
+      shotsFired: this.shotsFired,
+      abilitiesUsed: this.abilitiesUsed,
+      dungeonsClearedCount: this.dungeonsClearedCount,
+      timePlayed: Math.floor((Date.now() - this.sessionStartTime) / 1000),
+      killedBy,
+    };
   }
 }

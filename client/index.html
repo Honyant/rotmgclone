@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RotMG Clone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -13,7 +16,7 @@
     body {
       background: #1a1a2e;
       color: #eee;
-      font-family: 'Segoe UI', Arial, sans-serif;
+      font-family: 'VT323', monospace;
       overflow: hidden;
     }
     #game-container {
@@ -39,8 +42,9 @@
       background: rgba(0, 0, 0, 0.7);
       padding: 10px;
       border-radius: 5px;
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: 18px;
+      line-height: 1.6;
+      letter-spacing: 0.5px;
     }
     #xp-bar-container {
       flex: 1;
@@ -61,9 +65,10 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 48px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 32px;
       color: #ffd700;
-      text-shadow: 0 0 20px #ffd700, 0 0 40px #ff8800;
+      text-shadow: 0 0 20px #ffd700, 0 0 40px #ff8800, 3px 3px 0 #000;
       pointer-events: none;
       opacity: 0;
       z-index: 1000;
@@ -80,7 +85,7 @@
       overflow-y: auto;
       padding: 10px;
       border-radius: 5px 5px 0 0;
-      font-size: 12px;
+      font-size: 16px;
     }
     #chat-input {
       width: 100%;
@@ -88,7 +93,8 @@
       border: none;
       background: rgba(0, 0, 0, 0.8);
       color: #fff;
-      font-size: 12px;
+      font-family: 'VT323', monospace;
+      font-size: 16px;
       border-radius: 0 0 5px 5px;
       pointer-events: auto;
     }
@@ -113,9 +119,11 @@
       min-width: 300px;
     }
     .screen-title {
-      font-size: 24px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 20px;
       margin-bottom: 20px;
       color: #ffd700;
+      text-shadow: 2px 2px 0 #000;
     }
     .form-group {
       margin-bottom: 15px;
@@ -127,15 +135,19 @@
       background: #222;
       color: #fff;
       border-radius: 5px;
-      font-size: 14px;
+      font-family: 'VT323', monospace;
+      font-size: 18px;
     }
     .btn {
       padding: 10px 20px;
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      font-size: 14px;
+      font-family: 'VT323', monospace;
+      font-size: 18px;
       margin: 5px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
     .btn-primary {
       background: #4a90d9;
@@ -321,27 +333,191 @@
       pointer-events: none;
     }
     .controls-title {
-      font-size: 18px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 14px;
       color: #ffd700;
       text-align: center;
       margin-bottom: 15px;
       border-bottom: 1px solid #444;
       padding-bottom: 10px;
+      text-shadow: 1px 1px 0 #000;
     }
     .controls-list {
-      font-size: 13px;
-      line-height: 1.8;
+      font-size: 16px;
+      line-height: 2;
     }
     .controls-list .key {
       display: inline-block;
-      min-width: 80px;
+      min-width: 100px;
       color: #4a90d9;
       font-weight: bold;
+    }
+    /* Death screen */
+    #death-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transition: background 2s ease;
+    }
+    #death-screen .death-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      opacity: 0;
+      transform: scale(0.95);
+      transition: opacity 1.5s ease 1s, transform 1.5s ease 1s;
+    }
+    #death-screen.visible {
+      pointer-events: auto;
+      background: rgba(0, 0, 0, 0.92);
+    }
+    #death-screen.show-content .death-content {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .death-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 48px;
+      color: #ff4444;
+      text-shadow: 0 0 20px #ff0000, 0 0 40px #880000, 4px 4px 0 #000;
+      margin-bottom: 10px;
+      animation: deathPulse 2s ease-in-out infinite;
+    }
+    @keyframes deathPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.02); }
+    }
+    .death-character {
+      font-family: 'VT323', monospace;
+      font-size: 28px;
+      color: #888;
+      margin-bottom: 5px;
+    }
+    .death-killer {
+      font-family: 'VT323', monospace;
+      font-size: 22px;
+      color: #ff8888;
+      margin-bottom: 30px;
+    }
+    .death-stats-container {
+      background: rgba(20, 20, 35, 0.95);
+      border: 2px solid #ff4444;
+      border-radius: 10px;
+      padding: 20px 40px;
+      min-width: 400px;
+      max-width: 500px;
+    }
+    .death-stats-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 14px;
+      color: #ffd700;
+      text-align: center;
+      margin-bottom: 20px;
+      text-shadow: 1px 1px 0 #000;
+    }
+    .death-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 30px;
+    }
+    .death-stat {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'VT323', monospace;
+      font-size: 20px;
+    }
+    .death-stat-label {
+      color: #888;
+    }
+    .death-stat-value {
+      color: #fff;
+      font-weight: bold;
+    }
+    .death-stat-value.highlight {
+      color: #ffd700;
+    }
+    .death-stat.full-width {
+      grid-column: span 2;
+      border-top: 1px solid #444;
+      padding-top: 10px;
+      margin-top: 5px;
+    }
+    .death-continue {
+      margin-top: 30px;
+      font-family: 'VT323', monospace;
+      font-size: 18px;
+      color: #666;
+      animation: blink 1.5s ease-in-out infinite;
+      transition: opacity 0.5s ease;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
   </style>
 </head>
 <body>
   <div id="level-up-overlay">LEVEL UP!</div>
+
+  <div id="death-screen">
+    <div class="death-content">
+      <div class="death-title">YOU DIED</div>
+      <div class="death-character"><span id="death-char-name">Unknown</span> the <span id="death-class-name">Adventurer</span></div>
+      <div class="death-killer">Slain by <span id="death-killer-name">Unknown</span></div>
+      <div class="death-stats-container">
+        <div class="death-stats-title">Final Statistics</div>
+        <div class="death-stats-grid">
+          <div class="death-stat">
+            <span class="death-stat-label">Level Reached</span>
+            <span class="death-stat-value highlight" id="death-level">1</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Time Survived</span>
+            <span class="death-stat-value" id="death-time">0:00</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Enemies Slain</span>
+            <span class="death-stat-value highlight" id="death-kills">0</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Total XP Earned</span>
+            <span class="death-stat-value" id="death-xp">0</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Damage Dealt</span>
+            <span class="death-stat-value" id="death-damage-dealt">0</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Damage Taken</span>
+            <span class="death-stat-value" id="death-damage-taken">0</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Shots Fired</span>
+            <span class="death-stat-value" id="death-shots">0</span>
+          </div>
+          <div class="death-stat">
+            <span class="death-stat-label">Abilities Used</span>
+            <span class="death-stat-value" id="death-abilities">0</span>
+          </div>
+          <div class="death-stat full-width">
+            <span class="death-stat-label">Dungeons Completed</span>
+            <span class="death-stat-value highlight" id="death-dungeons">0</span>
+          </div>
+        </div>
+      </div>
+      <div class="death-continue">Press any key to continue...</div>
+    </div>
+  </div>
+
   <div id="game-container">
     <!-- PixiJS will create its canvas here -->
 

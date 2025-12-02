@@ -154,6 +154,12 @@ export class Instance {
             const damage = enemy.takeDamage(projectile.damage, projectile.ownerId);
             projectile.recordHit(enemy.id);
 
+            // Track damage dealt by player
+            const shooter = this.players.get(projectile.ownerId);
+            if (shooter) {
+              shooter.damageDealt += damage;
+            }
+
             // Send damage event
             this.broadcastToNearby(enemy.position, {
               type: 'damage',
@@ -185,7 +191,10 @@ export class Instance {
 
             // Check if player died
             if (player.isDead()) {
-              this.handlePlayerDeath(player);
+              // Get enemy name for death screen
+              const killer = this.enemies.get(projectile.ownerId);
+              const killerName = killer?.definition.name || 'Unknown Enemy';
+              this.handlePlayerDeath(player, killerName);
             }
           }
         }
@@ -196,9 +205,10 @@ export class Instance {
   private handleEnemyDeath(enemy: EnemyEntity, killerId: string): void {
     enemy.remove();
 
-    // Award XP to killer
+    // Award XP to killer and track kill
     const killer = this.players.get(killerId);
     if (killer) {
+      killer.enemiesKilled++;
       const leveledUp = killer.addExp(enemy.definition.xpReward);
       if (leveledUp) {
         this.sendToPlayer(killer.id, {
@@ -276,13 +286,22 @@ export class Instance {
     });
   }
 
-  private handlePlayerDeath(player: PlayerEntity): void {
+  private handlePlayerDeath(player: PlayerEntity, killerName: string = 'Unknown'): void {
     player.remove();
 
-    // Broadcast death
+    // Get death stats
+    const stats = player.getDeathStats(killerName);
+
+    // Broadcast death with stats to the player who died
+    this.sendToPlayer(player.id, {
+      type: 'death',
+      data: { entityId: player.id, entityType: 'player', killerName, stats },
+    });
+
+    // Broadcast simple death event to nearby players (no stats for them)
     this.broadcastToNearby(player.position, {
       type: 'death',
-      data: { entityId: player.id, entityType: 'player', killerName: 'Enemy' },
+      data: { entityId: player.id, entityType: 'player', killerName },
     });
 
     // Notify game server to handle character death
@@ -529,6 +548,10 @@ export class Instance {
 
   getPlayer(playerId: string): PlayerEntity | undefined {
     return this.players.get(playerId);
+  }
+
+  getAllPlayers(): PlayerEntity[] {
+    return Array.from(this.players.values());
   }
 
   getPlayersNear(pos: Vec2, radius: number): PlayerEntity[] {

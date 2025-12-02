@@ -13,6 +13,7 @@ import type {
   PlayerSnapshot,
   Vec2,
   TileType,
+  PlayerDeathStats,
 } from '@rotmg/shared';
 import { ITEMS, WEAPONS, ARMORS, ABILITIES, RINGS, getExpForLevel, MAX_LEVEL } from '@rotmg/shared';
 
@@ -49,6 +50,12 @@ export class Game {
   // Controls overlay
   private controlsOverlay: HTMLElement;
 
+  // Death screen
+  private deathScreen: HTMLElement;
+  private deathScreenActive: boolean = false;
+  private canDismissDeathScreen: boolean = false;
+  private deathScreenKeyHandler: ((e: KeyboardEvent) => void) | null = null;
+
   constructor() {
     const gameContainer = document.getElementById('game-container')!;
 
@@ -64,6 +71,7 @@ export class Game {
     this.lootItems = document.getElementById('loot-items')!;
     this.itemTooltip = document.getElementById('item-tooltip')!;
     this.controlsOverlay = document.getElementById('controls-overlay')!;
+    this.deathScreen = document.getElementById('death-screen')!;
 
     // Determine WebSocket URL
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -112,7 +120,10 @@ export class Game {
 
       onCharacterList: (data) => {
         this.characterList = data;
-        this.setState('character_select');
+        // Don't show character select if death screen is active
+        if (!this.deathScreenActive) {
+          this.setState('character_select');
+        }
         this.updateCharacterList();
       },
 
@@ -138,8 +149,7 @@ export class Game {
 
       onDeath: (event) => {
         if (event.entityType === 'player' && event.entityId === this.playerId) {
-          this.setState('dead');
-          alert('You died! Your character has been lost forever.');
+          this.showDeathScreen(event.stats, event.killerName);
         }
       },
 
@@ -255,10 +265,7 @@ export class Game {
 
     this.loginScreen.classList.toggle('hidden', newState !== 'login');
     this.characterScreen.classList.toggle('hidden', newState !== 'character_select');
-
-    if (newState === 'dead') {
-      this.characterScreen.classList.remove('hidden');
-    }
+    // Death screen is shown/hidden separately by showDeathScreen/hideDeathScreen
   }
 
   private updateCharacterList(): void {
@@ -656,6 +663,120 @@ export class Game {
 
     // Create double helix particle effect
     this.renderer.playHelixParticles();
+  }
+
+  private showDeathScreen(stats?: PlayerDeathStats, killerName?: string): void {
+    // Set state
+    this.setState('dead');
+    this.deathScreenActive = true;
+    this.canDismissDeathScreen = false;
+
+    // Populate death screen with stats
+    if (stats) {
+      document.getElementById('death-char-name')!.textContent = stats.characterName;
+      document.getElementById('death-class-name')!.textContent = stats.className;
+      document.getElementById('death-killer-name')!.textContent = killerName || 'Unknown';
+      document.getElementById('death-level')!.textContent = String(stats.level);
+      document.getElementById('death-kills')!.textContent = String(stats.enemiesKilled);
+      document.getElementById('death-xp')!.textContent = this.formatNumber(stats.totalXp);
+      document.getElementById('death-damage-dealt')!.textContent = this.formatNumber(stats.damageDealt);
+      document.getElementById('death-damage-taken')!.textContent = this.formatNumber(stats.damageTaken);
+      document.getElementById('death-shots')!.textContent = String(stats.shotsFired);
+      document.getElementById('death-abilities')!.textContent = String(stats.abilitiesUsed);
+      document.getElementById('death-dungeons')!.textContent = String(stats.dungeonsClearedCount);
+      document.getElementById('death-time')!.textContent = this.formatTime(stats.timePlayed);
+    }
+
+    // Hide the continue prompt initially
+    const continuePrompt = document.querySelector('.death-continue') as HTMLElement;
+    if (continuePrompt) {
+      continuePrompt.style.opacity = '0';
+    }
+
+    // Remove any existing handler
+    if (this.deathScreenKeyHandler) {
+      window.removeEventListener('keydown', this.deathScreenKeyHandler, true);
+      this.deathScreenKeyHandler = null;
+    }
+
+    // Create the key handler
+    this.deathScreenKeyHandler = (e: KeyboardEvent) => {
+      // Block all keypresses while death screen is showing
+      if (this.deathScreenActive) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Only allow dismissal after animations complete
+        if (this.canDismissDeathScreen) {
+          this.hideDeathScreen();
+        }
+      }
+    };
+
+    // Add listener in capture phase so it runs BEFORE other handlers
+    window.addEventListener('keydown', this.deathScreenKeyHandler, true);
+
+    // Start animations
+    // 1. Background fades in first
+    this.deathScreen.classList.add('visible');
+
+    // 2. Content fades in after background starts
+    setTimeout(() => {
+      if (this.deathScreenActive) {
+        this.deathScreen.classList.add('show-content');
+      }
+    }, 500);
+
+    // 3. Enable dismissal after animations complete (~4s)
+    setTimeout(() => {
+      if (this.deathScreenActive) {
+        this.canDismissDeathScreen = true;
+        if (continuePrompt) {
+          continuePrompt.style.opacity = '1';
+        }
+      }
+    }, 4000);
+  }
+
+  private hideDeathScreen(): void {
+    // Clean up state
+    this.deathScreenActive = false;
+    this.canDismissDeathScreen = false;
+
+    // Remove key handler
+    if (this.deathScreenKeyHandler) {
+      window.removeEventListener('keydown', this.deathScreenKeyHandler, true);
+      this.deathScreenKeyHandler = null;
+    }
+
+    // Fade out: first content, then background
+    this.deathScreen.classList.remove('show-content');
+
+    // After content fades, remove background and transition to character select
+    setTimeout(() => {
+      this.deathScreen.classList.remove('visible');
+      this.setState('character_select');
+    }, 1000);
+  }
+
+  private formatNumber(num: number): string {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return String(num);
+  }
+
+  private formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins >= 60) {
+      const hours = Math.floor(mins / 60);
+      const remMins = mins % 60;
+      return `${hours}:${String(remMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${mins}:${String(secs).padStart(2, '0')}`;
   }
 
   async start(): Promise<void> {

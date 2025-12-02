@@ -418,7 +418,7 @@ export class SimpleRenderer {
       }
     }
 
-    // Draw portals (static, with blinking support)
+    // Draw portals (static, with blinking support and glow effect)
     for (const portal of snapshot.portals) {
       // Skip invisible portals (blinking effect)
       if (!portal.visible) continue;
@@ -427,13 +427,57 @@ export class SimpleRenderer {
       const screenX = pos.x * TILE_SIZE - this.cameraX;
       const screenY = pos.y * TILE_SIZE - this.cameraY;
 
+      const baseColor = portal.targetType === 'nexus' ? '#4488ff' :
+                       portal.targetType === 'dungeon' ? '#ff4444' : '#ff8844';
+      const glowColor = portal.targetType === 'nexus' ? 'rgba(68, 136, 255,' :
+                       portal.targetType === 'dungeon' ? 'rgba(255, 68, 68,' : 'rgba(255, 136, 68,';
+
+      // Pulsing glow effect
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 200);
+      const glowRadius = 35 + pulse * 15;
+
+      // Outer glow (radial gradient)
+      const gradient = ctx.createRadialGradient(screenX, screenY, 10, screenX, screenY, glowRadius);
+      gradient.addColorStop(0, glowColor + (0.6 * pulse) + ')');
+      gradient.addColorStop(0.5, glowColor + (0.3 * pulse) + ')');
+      gradient.addColorStop(1, glowColor + '0)');
+
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Inner swirl effect
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(performance.now() / 500);
+      for (let i = 0; i < 4; i++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.beginPath();
+        ctx.arc(8, 0, 4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.3 + 0.2 * pulse) + ')';
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Main portal circle
       ctx.beginPath();
       ctx.arc(screenX, screenY, 18, 0, Math.PI * 2);
-      ctx.fillStyle = portal.targetType === 'nexus' ? '#4488ff' :
-                     portal.targetType === 'dungeon' ? '#ff4444' : '#ff8844';
+      ctx.fillStyle = baseColor;
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+
+      // Bright inner ring
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, 18, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.7 + 0.3 * pulse) + ')';
       ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, 22 + pulse * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.3 * pulse) + ')';
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
 
@@ -503,9 +547,16 @@ export class SimpleRenderer {
       ctx.rotate(this.cameraRotation);
       this.drawHealthBar(ctx, 0, -20, player.hp, player.maxHp, 30);
       ctx.fillStyle = '#fff';
-      ctx.font = '10px Arial';
+      ctx.font = '14px "VT323", monospace';
       ctx.textAlign = 'center';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 2;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
       ctx.fillText(player.name, 0, -28);
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
       ctx.restore();
     }
 

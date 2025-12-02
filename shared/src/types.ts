@@ -177,10 +177,26 @@ export interface DamageEvent {
   newHp: number;
 }
 
+export interface PlayerDeathStats {
+  characterName: string;
+  className: string;
+  level: number;
+  totalXp: number;
+  enemiesKilled: number;
+  damageDealt: number;
+  damageTaken: number;
+  shotsFired: number;
+  abilitiesUsed: number;
+  dungeonsClearedCount: number;
+  timePlayed: number; // seconds
+  killedBy: string;
+}
+
 export interface DeathEvent {
   entityId: string;
   entityType: 'player' | 'enemy';
   killerName?: string;
+  stats?: PlayerDeathStats; // Only for player deaths
 }
 
 export interface LootSpawnEvent {

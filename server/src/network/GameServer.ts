@@ -343,6 +343,7 @@ export class GameServer {
     if (!weapon) return;
 
     player.lastShootTime = Date.now();
+    player.shotsFired++;
 
     // Calculate damage
     const baseDamage = weapon.damage[0] + Math.random() * (weapon.damage[1] - weapon.damage[0]);
@@ -394,6 +395,7 @@ export class GameServer {
     // Consume MP and set cooldown
     player.mp -= ability.mpCost;
     player.lastAbilityTime = now;
+    player.abilitiesUsed++;
 
     // Execute ability effect
     instance.executeAbility(player, ability);
@@ -690,6 +692,11 @@ export class GameServer {
 
   // Called when dungeon boss is killed - spawn return portal
   onDungeonBossKilled(dungeonInstance: Instance, bossPosition: Vec2): void {
+    // Credit all players in the dungeon with a dungeon clear
+    for (const player of dungeonInstance.getAllPlayers()) {
+      player.dungeonsClearedCount++;
+    }
+
     // Get source instance (realm)
     const sourceInstanceId = dungeonInstance.getSourceInstanceId();
     if (!sourceInstanceId) {
