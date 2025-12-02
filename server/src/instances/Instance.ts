@@ -27,6 +27,7 @@ import { LootEntity } from '../game/LootEntity.js';
 import { PortalEntity } from '../game/PortalEntity.js';
 import { Entity } from '../game/Entity.js';
 import { GameServer } from '../network/GameServer.js';
+import { SpatialHash } from '../game/SpatialHash.js';
 
 export type InstanceType = 'nexus' | 'realm' | 'dungeon';
 
@@ -42,6 +43,11 @@ export class Instance {
   private gameServer: GameServer | null = null;
   private spawnTimers: Map<number, number> = new Map();
   private safeZone: boolean;
+
+  // Spatial hashes for efficient collision detection
+  private playerHash: SpatialHash<PlayerEntity> = new SpatialHash(4);
+  private enemyHash: SpatialHash<EnemyEntity> = new SpatialHash(4);
+  private projectileHash: SpatialHash<ProjectileEntity> = new SpatialHash(4);
 
   // Dungeon-specific properties
   private bossRoomCenter: Vec2 | null = null;
@@ -67,9 +73,10 @@ export class Instance {
   }
 
   update(deltaTime: number, tick: number): void {
-    // Update all entities
+    // Update all entities and their spatial hash positions
     for (const player of this.players.values()) {
       player.update(deltaTime);
+      this.playerHash.update(player);
 
       // Auto-heal in safe zones (nexus)
       if (this.safeZone) {
@@ -79,10 +86,12 @@ export class Instance {
 
     for (const enemy of this.enemies.values()) {
       enemy.update(deltaTime);
+      this.enemyHash.update(enemy);
     }
 
     for (const projectile of this.projectiles.values()) {
       projectile.update(deltaTime);
+      this.projectileHash.update(projectile);
 
       // Check wall collision
       if (!this.map.isWalkable(projectile.position.x, projectile.position.y)) {
@@ -128,12 +137,14 @@ export class Instance {
   }
 
   private resolveCombat(): void {
-    // Check player projectiles hitting enemies
+    // Check player projectiles hitting enemies (using spatial hash)
     for (const projectile of this.projectiles.values()) {
       if (projectile.markedForRemoval) continue;
 
       if (projectile.ownerType === 'player') {
-        for (const enemy of this.enemies.values()) {
+        // Only check enemies near this projectile
+        const nearbyEnemies = this.enemyHash.getNearby(projectile.position);
+        for (const enemy of nearbyEnemies) {
           if (enemy.markedForRemoval) continue;
           if (projectile.hasHit(enemy.id)) continue;
 
@@ -154,8 +165,9 @@ export class Instance {
           }
         }
       } else {
-        // Enemy projectiles hitting players
-        for (const player of this.players.values()) {
+        // Enemy projectiles hitting players (using spatial hash)
+        const nearbyPlayers = this.playerHash.getNearby(projectile.position);
+        for (const player of nearbyPlayers) {
           if (player.markedForRemoval) continue;
           if (projectile.hasHit(player.id)) continue;
 
@@ -319,12 +331,14 @@ export class Instance {
   private cleanupEntities(): void {
     for (const [id, entity] of this.projectiles) {
       if (entity.markedForRemoval) {
+        this.projectileHash.remove(entity);
         this.projectiles.delete(id);
       }
     }
 
     for (const [id, entity] of this.enemies) {
       if (entity.markedForRemoval) {
+        this.enemyHash.remove(entity);
         this.enemies.delete(id);
       }
     }
@@ -337,6 +351,7 @@ export class Instance {
 
     for (const [id, entity] of this.players) {
       if (entity.markedForRemoval) {
+        this.playerHash.remove(entity);
         this.players.delete(id);
       }
     }
@@ -497,12 +512,14 @@ export class Instance {
       player.position = this.map.findSpawnPosition();
     }
     this.players.set(player.id, player);
+    this.playerHash.insert(player);
   }
 
   removePlayer(playerId: string): PlayerEntity | undefined {
     const player = this.players.get(playerId);
     if (player) {
       player.instance = null;
+      this.playerHash.remove(player);
       this.players.delete(playerId);
     }
     return player;
@@ -513,20 +530,14 @@ export class Instance {
   }
 
   getPlayersNear(pos: Vec2, radius: number): PlayerEntity[] {
-    const result: PlayerEntity[] = [];
-    for (const player of this.players.values()) {
-      const dx = player.position.x - pos.x;
-      const dy = player.position.y - pos.y;
-      if (dx * dx + dy * dy <= radius * radius) {
-        result.push(player);
-      }
-    }
-    return result;
+    // Use spatial hash for efficient lookup
+    return this.playerHash.getInRadius(pos, radius);
   }
 
   spawnEnemy(definitionId: string, position: Vec2): EnemyEntity {
     const enemy = new EnemyEntity(definitionId, position, this);
     this.enemies.set(enemy.id, enemy);
+    this.enemyHash.insert(enemy);
     return enemy;
   }
 
@@ -553,6 +564,7 @@ export class Instance {
       lifetime
     );
     this.projectiles.set(projectile.id, projectile);
+    this.projectileHash.insert(projectile);
     return projectile;
   }
 

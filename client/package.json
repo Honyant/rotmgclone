@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
     "@rotmg/shared": "1.0.0",
     "phaser": "^3.90.0"
   },

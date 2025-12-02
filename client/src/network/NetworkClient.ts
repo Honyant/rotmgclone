@@ -1,3 +1,4 @@
+import { encode, decode } from '@msgpack/msgpack';
 import type {
   ClientMessage,
   ServerMessage,
@@ -46,6 +47,7 @@ export class NetworkClient {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
     this.ws = new WebSocket(this.serverUrl);
+    this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {
       console.log('Connected to server');
@@ -55,7 +57,8 @@ export class NetworkClient {
 
     this.ws.onmessage = (event) => {
       try {
-        const message: ServerMessage = JSON.parse(event.data);
+        // Handle binary MessagePack data
+        const message: ServerMessage = decode(new Uint8Array(event.data)) as ServerMessage;
         this.handleMessage(message);
       } catch (e) {
         console.error('Failed to parse server message:', e);
@@ -122,7 +125,7 @@ export class NetworkClient {
 
   private send(message: ClientMessage): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+      this.ws.send(encode(message));
     }
   }
 

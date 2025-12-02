@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuid } from 'uuid';
+import { encode, decode } from '@msgpack/msgpack';
 import {
   ClientMessage,
   ServerMessage,
@@ -94,7 +95,13 @@ export class GameServer {
 
     ws.on('message', (data) => {
       try {
-        const message: ClientMessage = JSON.parse(data.toString());
+        // Support both binary (MessagePack) and JSON for backwards compatibility
+        let message: ClientMessage;
+        if (data instanceof Buffer || data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+          message = decode(data instanceof Buffer ? data : new Uint8Array(data as ArrayBuffer)) as ClientMessage;
+        } else {
+          message = JSON.parse(data.toString());
+        }
         this.handleMessage(ws, session, message);
       } catch (e) {
         console.error('Failed to parse message:', e);
@@ -633,13 +640,13 @@ export class GameServer {
   sendToPlayer(playerId: string, message: ServerMessage): void {
     const ws = this.playerToClient.get(playerId);
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+      ws.send(encode(message));
     }
   }
 
   private send(ws: WebSocket, message: ServerMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+      ws.send(encode(message));
     }
   }
 
