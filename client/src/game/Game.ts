@@ -704,6 +704,10 @@ export class Game {
     }
 
     if (this.state === 'playing') {
+      // Apply local movement prediction for instant response
+      const moveDir = this.input.getMoveDirection();
+      this.renderer.applyLocalMovement(moveDir, deltaTime);
+
       // Update camera rotation smoothly based on held keys
       this.input.updateCameraRotation(deltaTime);
       this.renderer.setCameraRotation(this.input.getCameraRotation());

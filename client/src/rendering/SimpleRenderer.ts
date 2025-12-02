@@ -55,6 +55,7 @@ export class SimpleRenderer {
 
   // Offscreen canvas for the map (rendered once)
   private mapCanvas: HTMLCanvasElement | null = null;
+  private mapTiles: number[] = [];
   private mapWidth = 0;
   private mapHeight = 0;
 
@@ -67,8 +68,14 @@ export class SimpleRenderer {
   private lastSnapshot: WorldSnapshot | null = null;
   private lastPlayerId: string | null = null;
 
+  // Client-side prediction for local player
+  private predictedPos: Vec2 | null = null;
+  private lastMoveDir: Vec2 = { x: 0, y: 0 };
+  private playerSpeed: number = 5; // Base speed, updated from snapshot
+
   // Interpolation settings
   private readonly LERP_SPEED = 15; // How fast to interpolate (higher = snappier)
+  private readonly RECONCILE_SPEED = 10; // How fast to reconcile prediction with server
 
   constructor(container: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -103,9 +110,11 @@ export class SimpleRenderer {
   setMapData(width: number, height: number, tiles: number[]): void {
     this.mapWidth = width;
     this.mapHeight = height;
+    this.mapTiles = tiles;
 
     // Clear interpolation state on map change
     this.entityPositions.clear();
+    this.predictedPos = null;
 
     // Reset minimap cache
     this.minimapCache = null;
@@ -184,6 +193,19 @@ export class SimpleRenderer {
 
     for (const player of snapshot.players) {
       seenIds.add(player.id);
+
+      // For local player, update speed and reconcile prediction
+      if (player.id === playerId) {
+        // Calculate speed from player stats (same formula as server)
+        this.playerSpeed = 4 + player.speed * 0.1;
+
+        // Initialize prediction if needed
+        if (!this.predictedPos) {
+          this.predictedPos = { ...player.position };
+        }
+        // Server position is stored in entity target for reconciliation
+      }
+
       this.updateEntityTarget(player.id, player.position, now);
     }
 
@@ -270,6 +292,58 @@ export class SimpleRenderer {
     return entity.currentPos;
   }
 
+  // Check if a tile is walkable (for client-side prediction)
+  private isWalkable(x: number, y: number): boolean {
+    const tileX = Math.floor(x);
+    const tileY = Math.floor(y);
+    if (tileX < 0 || tileX >= this.mapWidth || tileY < 0 || tileY >= this.mapHeight) {
+      return false;
+    }
+    const tile = this.mapTiles[tileY * this.mapWidth + tileX];
+    return tile !== 0 && tile !== 2; // 0 = void, 2 = wall
+  }
+
+  // Apply local movement to predicted position
+  applyLocalMovement(moveDir: Vec2, deltaTime: number): void {
+    if (!this.predictedPos) return;
+
+    this.lastMoveDir = moveDir;
+
+    // Normalize direction
+    const len = Math.sqrt(moveDir.x * moveDir.x + moveDir.y * moveDir.y);
+    if (len < 0.01) return;
+
+    const nx = moveDir.x / len;
+    const ny = moveDir.y / len;
+
+    // Calculate new position
+    const newX = this.predictedPos.x + nx * this.playerSpeed * deltaTime;
+    const newY = this.predictedPos.y + ny * this.playerSpeed * deltaTime;
+
+    // Simple collision checking (same as server)
+    const radius = 0.4; // Player radius
+    if (this.isWalkable(newX - radius, newY - radius) &&
+        this.isWalkable(newX + radius, newY - radius) &&
+        this.isWalkable(newX - radius, newY + radius) &&
+        this.isWalkable(newX + radius, newY + radius)) {
+      this.predictedPos.x = newX;
+      this.predictedPos.y = newY;
+    } else {
+      // Try sliding along walls
+      if (this.isWalkable(newX - radius, this.predictedPos.y - radius) &&
+          this.isWalkable(newX + radius, this.predictedPos.y - radius) &&
+          this.isWalkable(newX - radius, this.predictedPos.y + radius) &&
+          this.isWalkable(newX + radius, this.predictedPos.y + radius)) {
+        this.predictedPos.x = newX;
+      } else if (this.isWalkable(this.predictedPos.x - radius, newY - radius) &&
+                 this.isWalkable(this.predictedPos.x + radius, newY - radius) &&
+                 this.isWalkable(this.predictedPos.x - radius, newY + radius) &&
+                 this.isWalkable(this.predictedPos.x + radius, newY + radius)) {
+        this.predictedPos.y = newY;
+      }
+    }
+  }
+
   // Called every frame to render with interpolation
   render(deltaTime: number): void {
     if (!this.lastSnapshot || !this.lastPlayerId) return;
@@ -278,17 +352,32 @@ export class SimpleRenderer {
     const snapshot = this.lastSnapshot;
     const playerId = this.lastPlayerId;
 
+    // Reconcile prediction with server position
+    const serverEntity = this.entityPositions.get(playerId);
+    if (this.predictedPos && serverEntity) {
+      // Smoothly pull predicted position toward server position
+      const t = Math.min(1, deltaTime * this.RECONCILE_SPEED);
+      this.predictedPos.x += (serverEntity.targetPos.x - this.predictedPos.x) * t;
+      this.predictedPos.y += (serverEntity.targetPos.y - this.predictedPos.y) * t;
+    }
+
+    // Update other entities interpolation
+    for (const [id, entity] of this.entityPositions) {
+      if (id !== playerId) {
+        this.getInterpolatedPos(id, deltaTime);
+      }
+    }
+
     // Clear canvas
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Find local player for camera (use interpolated position)
-    const localPlayerPos = this.getInterpolatedPos(playerId, deltaTime);
+    // Find local player for camera - use predicted position for instant response
     let playerWorldX = 0;
     let playerWorldY = 0;
-    if (localPlayerPos) {
-      playerWorldX = localPlayerPos.x * TILE_SIZE;
-      playerWorldY = localPlayerPos.y * TILE_SIZE;
+    if (this.predictedPos) {
+      playerWorldX = this.predictedPos.x * TILE_SIZE;
+      playerWorldY = this.predictedPos.y * TILE_SIZE;
     }
 
     // Save context state before rotation
@@ -390,12 +479,15 @@ export class SimpleRenderer {
       ctx.restore();
     }
 
-    // Draw players (interpolated)
+    // Draw players (local player uses predicted position, others interpolated)
     for (const player of snapshot.players) {
-      const pos = this.getInterpolatedPos(player.id, deltaTime) || player.position;
+      const isLocal = player.id === playerId;
+      // Use predicted position for local player for instant response
+      const pos = isLocal && this.predictedPos
+        ? this.predictedPos
+        : (this.getInterpolatedPos(player.id, deltaTime) || player.position);
       const screenX = pos.x * TILE_SIZE - this.cameraX;
       const screenY = pos.y * TILE_SIZE - this.cameraY;
-      const isLocal = player.id === playerId;
 
       ctx.beginPath();
       ctx.arc(screenX, screenY, 12, 0, Math.PI * 2);
@@ -532,20 +624,18 @@ export class SimpleRenderer {
   }
 
   getPlayerScreenPosition(playerWorldPos: Vec2): Vec2 {
-    // Use interpolated position if available
-    if (this.lastPlayerId) {
-      const pos = this.entityPositions.get(this.lastPlayerId);
-      if (pos) {
-        return {
-          x: pos.currentPos.x * TILE_SIZE - this.cameraX,
-          y: pos.currentPos.y * TILE_SIZE - this.cameraY,
-        };
-      }
-    }
+    // With client-side prediction, camera follows predicted position
+    // Player is always at center of screen (before rotation)
+    // Return canvas center since that's where the local player is rendered
     return {
-      x: playerWorldPos.x * TILE_SIZE - this.cameraX,
-      y: playerWorldPos.y * TILE_SIZE - this.cameraY,
+      x: CANVAS_WIDTH / 2,
+      y: CANVAS_HEIGHT / 2,
     };
+  }
+
+  // Get the predicted world position for the local player
+  getPredictedPosition(): Vec2 | null {
+    return this.predictedPos;
   }
 
   // Level up helix particle effect
