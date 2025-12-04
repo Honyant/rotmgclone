@@ -1,4 +1,4 @@
-import { Enemy, Vec2, ENEMIES, EnemyDefinition, EnemyAttack } from '@rotmg/shared';
+import { Enemy, Vec2, ENEMIES, EnemyDefinition, EnemyAttack, EnemyPhase } from '@rotmg/shared';
 import { Entity, normalizeVec2, vec2Sub, vec2Length } from './Entity.js';
 import { Instance } from '../instances/Instance.js';
 import { PlayerEntity } from './PlayerEntity.js';
@@ -17,6 +17,11 @@ export class EnemyEntity extends Entity implements Enemy {
   private wanderTarget: Vec2 | null = null;
   private wanderTimer: number = 0;
   private orbitAngle: number = 0;
+
+  // Phase system state (for bosses with phases)
+  private currentPhaseIndex: number = 0;
+  private phaseTimer: number = 0;
+  private isResting: boolean = false;
 
   // Damage tracking for soulbound qualification
   private damageByPlayer: Map<string, number> = new Map();
@@ -42,8 +47,60 @@ export class EnemyEntity extends Entity implements Enemy {
     // Execute behavior
     this.executeBehavior(deltaTime);
 
-    // Try to attack
+    // Update phase system if this enemy has phases
+    if (this.definition.phases && this.definition.phases.length > 0) {
+      this.updatePhase(deltaTime);
+    }
+
+    // Try to attack (respects phase rest periods)
     this.tryAttack();
+  }
+
+  private updatePhase(deltaTime: number): void {
+    const phases = this.definition.phases!;
+
+    // Determine current phase based on HP percentage
+    // Phases are ordered by descending HP threshold (100, 66, 33)
+    // We want the LAST phase whose threshold we've crossed
+    const hpPercent = (this.hp / this.maxHp) * 100;
+    let newPhaseIndex = 0;
+    for (let i = 0; i < phases.length; i++) {
+      if (hpPercent <= phases[i].hpPercent) {
+        newPhaseIndex = i;
+      }
+    }
+
+    // If phase changed, reset timer and start attacking
+    if (newPhaseIndex !== this.currentPhaseIndex) {
+      this.currentPhaseIndex = newPhaseIndex;
+      this.phaseTimer = 0;
+      this.isResting = false;
+    }
+
+    // Update attack/rest cycle timer
+    const currentPhase = phases[this.currentPhaseIndex];
+    this.phaseTimer += deltaTime;
+
+    if (this.isResting) {
+      // Check if rest period is over
+      if (this.phaseTimer >= currentPhase.restDuration) {
+        this.isResting = false;
+        this.phaseTimer = 0;
+      }
+    } else {
+      // Check if attack period is over
+      if (this.phaseTimer >= currentPhase.attackDuration) {
+        this.isResting = true;
+        this.phaseTimer = 0;
+      }
+    }
+  }
+
+  private getCurrentPhase(): EnemyPhase | null {
+    if (!this.definition.phases || this.definition.phases.length === 0) {
+      return null;
+    }
+    return this.definition.phases[this.currentPhaseIndex];
   }
 
   private updateTarget(): void {
@@ -177,10 +234,21 @@ export class EnemyEntity extends Entity implements Enemy {
   private tryAttack(): void {
     if (!this.targetPlayer) return;
 
+    // If in a rest period, don't attack
+    const currentPhase = this.getCurrentPhase();
+    if (currentPhase && this.isResting) {
+      return;
+    }
+
     const now = Date.now();
     const dist = this.distanceTo(this.targetPlayer);
 
     for (let i = 0; i < this.definition.attacks.length; i++) {
+      // If using phases, only use attacks allowed in current phase
+      if (currentPhase && !currentPhase.attackIndices.includes(i)) {
+        continue;
+      }
+
       const attack = this.definition.attacks[i];
       const lastAttack = this.lastAttackTimes[i];
       const fireInterval = 1000 / attack.rateOfFire;
@@ -218,7 +286,10 @@ export class EnemyEntity extends Entity implements Enemy {
 
     // Spawn projectiles
     const arcGapRad = (attack.arcGap * Math.PI) / 180;
-    const startAngle = aimAngle - (arcGapRad * (attack.numProjectiles - 1)) / 2;
+    // For even projectile counts, offset by half arcGap so one projectile fires
+    // directly at the target instead of splitting evenly around it (safe corridor)
+    const evenOffset = attack.numProjectiles % 2 === 0 ? arcGapRad / 2 : 0;
+    const startAngle = aimAngle - (arcGapRad * (attack.numProjectiles - 1)) / 2 - evenOffset;
 
     for (let i = 0; i < attack.numProjectiles; i++) {
       const angle = startAngle + arcGapRad * i;

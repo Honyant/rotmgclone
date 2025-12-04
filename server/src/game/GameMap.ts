@@ -1,4 +1,4 @@
-import { MapData, TileType, SpawnRegion, Vec2 } from '@rotmg/shared';
+import { MapData, TileType, SpawnRegion, Vec2, DUNGEONS, DungeonDefinition } from '@rotmg/shared';
 
 export class GameMap {
   width: number;
@@ -214,9 +214,10 @@ export class GameMap {
     });
   }
 
-  static createDungeonMap(): DungeonMapResult {
-    const width = 150;
-    const height = 150;
+  static createDungeonMap(dungeonType: string = 'demon_lair'): DungeonMapResult {
+    const dungeonDef = DUNGEONS[dungeonType] || DUNGEONS['demon_lair'];
+    const width = dungeonDef.mapSize;
+    const height = dungeonDef.mapSize;
     const tiles: TileType[] = new Array(width * height).fill(TileType.WALL);
 
     interface Room {
@@ -242,8 +243,7 @@ export class GameMap {
     rooms.push(startRoom);
 
     // Generate rooms using branching algorithm
-    const minRooms = 12;
-    const maxRooms = 18;
+    const [minRooms, maxRooms] = dungeonDef.roomCount;
     const targetRooms = minRooms + Math.floor(Math.random() * (maxRooms - minRooms + 1));
 
     // Directions: right, down, up (prefer forward progression)
@@ -415,7 +415,7 @@ export class GameMap {
           y: room.y,
           width: room.w,
           height: room.h,
-          enemyTypes: ['dungeon_boss'],
+          enemyTypes: [dungeonDef.bossId],
           maxEnemies: 1,
           spawnRate: 0.01, // Slow respawn
         });
@@ -424,7 +424,7 @@ export class GameMap {
           y: room.y,
           width: room.w,
           height: room.h,
-          enemyTypes: ['dungeon_guardian'],
+          enemyTypes: dungeonDef.guardianIds,
           maxEnemies: 3,
           spawnRate: 0.1,
         });
@@ -435,7 +435,7 @@ export class GameMap {
           y: room.y,
           width: room.w,
           height: room.h,
-          enemyTypes: ['dungeon_minion', 'dungeon_guardian'],
+          enemyTypes: [...dungeonDef.minionIds, ...dungeonDef.guardianIds],
           maxEnemies: 4 + Math.floor(Math.random() * 3),
           spawnRate: 0.3,
         });
@@ -459,9 +459,50 @@ export class GameMap {
       bossRoomCenter,
     };
   }
+
+  static createVaultMap(): VaultMapResult {
+    const width = 15;
+    const height = 15;
+    const tiles: TileType[] = new Array(width * height).fill(TileType.FLOOR);
+
+    // Add walls around the edge
+    for (let x = 0; x < width; x++) {
+      tiles[x] = TileType.WALL;
+      tiles[(height - 1) * width + x] = TileType.WALL;
+    }
+    for (let y = 0; y < height; y++) {
+      tiles[y * width] = TileType.WALL;
+      tiles[y * width + width - 1] = TileType.WALL;
+    }
+
+    // Add spawn area in the bottom half
+    for (let y = 10; y < 13; y++) {
+      for (let x = 6; x < 9; x++) {
+        tiles[y * width + x] = TileType.SPAWN;
+      }
+    }
+
+    // Chest position is in the top half (centered)
+    const chestPosition: Vec2 = { x: 7.5, y: 4.5 };
+
+    return {
+      map: new GameMap({
+        width,
+        height,
+        tiles,
+        spawnRegions: [], // No enemy spawning in vault
+      }),
+      chestPosition,
+    };
+  }
 }
 
 export interface DungeonMapResult {
   map: GameMap;
   bossRoomCenter: Vec2;
+}
+
+export interface VaultMapResult {
+  map: GameMap;
+  chestPosition: Vec2;
 }

@@ -424,6 +424,25 @@ export class GameDatabase {
     };
   }
 
+  // Vault methods
+  getVaultItems(accountId: string): (string | null)[] {
+    if (!this.db) return [];
+
+    const result = this.db.exec(`SELECT vault_items FROM accounts WHERE id = ?`, [accountId]);
+    if (result.length === 0 || result[0].values.length === 0) return [];
+
+    return JSON.parse(result[0].values[0][0] as string);
+  }
+
+  saveVaultItems(accountId: string, vaultItems: (string | null)[]): void {
+    if (!this.db) return;
+
+    this.db.run(`UPDATE accounts SET vault_items = ? WHERE id = ?`, [
+      JSON.stringify(vaultItems),
+      accountId,
+    ]);
+  }
+
   close(): void {
     if (this.saveInterval) {
       clearInterval(this.saveInterval);

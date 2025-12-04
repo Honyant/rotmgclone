@@ -287,6 +287,18 @@ export class SimpleRenderer {
       }
     }
 
+    for (const chest of snapshot.vaultChests) {
+      seenIds.add(chest.id);
+      // Vault chests don't move
+      if (!this.entityPositions.has(chest.id)) {
+        this.entityPositions.set(chest.id, {
+          currentPos: { ...chest.position },
+          targetPos: { ...chest.position },
+          lastUpdate: now,
+        });
+      }
+    }
+
     // Remove entities that no longer exist
     for (const id of this.entityPositions.keys()) {
       if (!seenIds.has(id)) {
@@ -532,6 +544,46 @@ export class SimpleRenderer {
       ctx.fillStyle = '#ffcc00';
       ctx.strokeText('Press F to enter', 0, -50);
       ctx.fillText('Press F to enter', 0, -50);
+
+      ctx.restore();
+    }
+
+    // Draw vault chests (static)
+    for (const chest of snapshot.vaultChests) {
+      const pos = this.getInterpolatedPos(chest.id, deltaTime) || chest.position;
+      const screenX = pos.x * TILE_SIZE - this.cameraX;
+      const screenY = pos.y * TILE_SIZE - this.cameraY;
+
+      // Chest body (dark brown box)
+      ctx.fillStyle = '#4a3020';
+      ctx.fillRect(screenX - 16, screenY - 12, 32, 24);
+
+      // Chest lid (lighter brown)
+      ctx.fillStyle = '#6b4830';
+      ctx.fillRect(screenX - 16, screenY - 16, 32, 8);
+
+      // Gold trim
+      ctx.strokeStyle = '#c9a030';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(screenX - 16, screenY - 16, 32, 28);
+
+      // Chest clasp (golden)
+      ctx.fillStyle = '#c9a030';
+      ctx.fillRect(screenX - 4, screenY - 4, 8, 6);
+
+      // Draw hint text above (counter-rotate to stay upright)
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(this.cameraRotation);
+
+      ctx.font = 'bold 12px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = '#7b5';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText('Vault', 0, -25);
+      ctx.fillText('Vault', 0, -25);
 
       ctx.restore();
     }

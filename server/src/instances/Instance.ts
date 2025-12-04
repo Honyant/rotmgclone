@@ -7,6 +7,7 @@ import {
   ProjectileSnapshot,
   LootSnapshot,
   PortalSnapshot,
+  VaultChestSnapshot,
   DamageEvent,
   DeathEvent,
   LootSpawnEvent,
@@ -18,6 +19,8 @@ import {
   PICKUP_RANGE,
   PORTAL_INTERACT_RANGE,
   AbilityDefinition,
+  getDungeonForEnemy,
+  DUNGEON_DROP_CHANCE,
 } from '@rotmg/shared';
 import { GameMap } from '../game/GameMap.js';
 import { PlayerEntity } from '../game/PlayerEntity.js';
@@ -25,11 +28,12 @@ import { EnemyEntity } from '../game/EnemyEntity.js';
 import { ProjectileEntity } from '../game/ProjectileEntity.js';
 import { LootEntity } from '../game/LootEntity.js';
 import { PortalEntity } from '../game/PortalEntity.js';
+import { VaultChestEntity } from '../game/VaultChestEntity.js';
 import { Entity } from '../game/Entity.js';
 import { GameServer } from '../network/GameServer.js';
 import { SpatialHash } from '../game/SpatialHash.js';
 
-export type InstanceType = 'nexus' | 'realm' | 'dungeon';
+export type InstanceType = 'nexus' | 'realm' | 'dungeon' | 'vault';
 
 export class Instance {
   id: string;
@@ -40,6 +44,7 @@ export class Instance {
   private projectiles: Map<string, ProjectileEntity> = new Map();
   private loots: Map<string, LootEntity> = new Map();
   private portals: Map<string, PortalEntity> = new Map();
+  private vaultChests: Map<string, VaultChestEntity> = new Map();
   private gameServer: GameServer | null = null;
   private spawnTimers: Map<number, number> = new Map();
   private safeZone: boolean;
@@ -60,7 +65,7 @@ export class Instance {
     this.id = id || uuid();
     this.type = type;
     this.map = map;
-    this.safeZone = type === 'nexus';
+    this.safeZone = type === 'nexus' || type === 'vault';
 
     // Initialize spawn timers for each region
     map.spawnRegions.forEach((_, index) => {
@@ -265,15 +270,18 @@ export class Instance {
 
     // Check for special enemy types
     if (this.gameServer) {
-      // Demons have 10% chance to drop dungeon portal (only in realm)
-      if (enemy.definitionId === 'demon' && this.type === 'realm') {
-        if (Math.random() < 0.1) {
-          this.gameServer.spawnDungeonPortal(this, { ...enemy.position });
+      // Check if this enemy can drop a dungeon portal (only in realm)
+      if (this.type === 'realm') {
+        const dungeonType = getDungeonForEnemy(enemy.definitionId);
+        const dropChance = DUNGEON_DROP_CHANCE[enemy.definitionId] || 0;
+        if (dungeonType && Math.random() < dropChance) {
+          this.gameServer.spawnDungeonPortal(this, { ...enemy.position }, dungeonType);
         }
       }
 
-      // Dungeon boss death spawns return portal
-      if (enemy.definitionId === 'dungeon_boss' && this.type === 'dungeon' && !this.bossKilled) {
+      // Dungeon boss death spawns return portal (check for any dungeon boss type)
+      const isBoss = enemy.definitionId === 'dungeon_boss' || enemy.definitionId === 'cube_overlord';
+      if (isBoss && this.type === 'dungeon' && !this.bossKilled) {
         this.bossKilled = true;
         this.gameServer.onDungeonBossKilled(this, { ...enemy.position });
       }
@@ -402,6 +410,7 @@ export class Instance {
     const nearbyProjectiles: ProjectileSnapshot[] = [];
     const nearbyLoots: LootSnapshot[] = [];
     const nearbyPortals: PortalSnapshot[] = [];
+    const nearbyVaultChests: VaultChestSnapshot[] = [];
 
     for (const p of this.players.values()) {
       if (this.inAOI(pos, p.position)) {
@@ -437,6 +446,12 @@ export class Instance {
       }
     }
 
+    for (const chest of this.vaultChests.values()) {
+      if (this.inAOI(pos, chest.position)) {
+        nearbyVaultChests.push(this.vaultChestToSnapshot(chest));
+      }
+    }
+
     return {
       tick,
       timestamp,
@@ -447,6 +462,7 @@ export class Instance {
       projectiles: nearbyProjectiles,
       loots: nearbyLoots,
       portals: nearbyPortals,
+      vaultChests: nearbyVaultChests,
     };
   }
 
@@ -517,6 +533,13 @@ export class Instance {
       targetType: p.targetType,
       name: p.name,
       visible: p.visible,
+    };
+  }
+
+  private vaultChestToSnapshot(c: VaultChestEntity): VaultChestSnapshot {
+    return {
+      id: c.id,
+      position: { ...c.position },
     };
   }
 
@@ -599,6 +622,18 @@ export class Instance {
 
   getPortal(portalId: string): PortalEntity | undefined {
     return this.portals.get(portalId);
+  }
+
+  addVaultChest(chest: VaultChestEntity): void {
+    this.vaultChests.set(chest.id, chest);
+  }
+
+  getVaultChest(chestId: string): VaultChestEntity | undefined {
+    return this.vaultChests.get(chestId);
+  }
+
+  getFirstVaultChest(): VaultChestEntity | undefined {
+    return this.vaultChests.values().next().value;
   }
 
   getLoot(lootId: string): LootEntity | undefined {
@@ -723,10 +758,16 @@ export class Instance {
     for (const region of this.map.spawnRegions) {
       // Spawn up to maxEnemies for each region
       for (let i = 0; i < region.maxEnemies; i++) {
-        const pos = this.map.findRandomPositionInRegion(region);
-        if (pos) {
-          const enemyType = region.enemyTypes[Math.floor(Math.random() * region.enemyTypes.length)];
-          this.spawnEnemy(enemyType, pos);
+        const enemyType = region.enemyTypes[Math.floor(Math.random() * region.enemyTypes.length)];
+
+        // Spawn boss at the center of the boss room
+        if (enemyType === 'dungeon_boss' && this.bossRoomCenter) {
+          this.spawnEnemy(enemyType, { ...this.bossRoomCenter });
+        } else {
+          const pos = this.map.findRandomPositionInRegion(region);
+          if (pos) {
+            this.spawnEnemy(enemyType, pos);
+          }
         }
       }
     }

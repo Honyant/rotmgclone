@@ -89,6 +89,13 @@ export interface ProjectileDefinition {
   color: string;
 }
 
+export interface EnemyPhase {
+  hpPercent: number; // HP threshold to enter this phase (100 = start, lower = later phases)
+  attackIndices: number[]; // Which attacks are active in this phase
+  attackDuration: number; // Seconds of attacking
+  restDuration: number; // Seconds of rest (no attacks)
+}
+
 export interface EnemyDefinition {
   id: string;
   name: string;
@@ -98,6 +105,7 @@ export interface EnemyDefinition {
   radius: number;
   behavior: EnemyBehavior;
   attacks: EnemyAttack[];
+  phases?: EnemyPhase[]; // Optional phase system for bosses
   xpReward: number;
   lootTable: LootEntry[];
   color: string;
@@ -431,6 +439,92 @@ export const WEAPONS: Record<string, WeaponDefinition> = {
     piercing: true,
     projectileId: 'arrow',
   },
+  // T5 Cube Dimension weapons (best in game)
+  cube_staff: {
+    id: 'cube_staff',
+    name: 'Staff of the Cube',
+    type: 'staff',
+    tier: 5,
+    damage: [90, 150],
+    rateOfFire: 1.6,
+    range: 11,
+    projectileSpeed: 18,
+    numProjectiles: 4,
+    arcGap: 5,
+    piercing: true,
+    projectileId: 'cube_bullet',
+  },
+  cube_blade: {
+    id: 'cube_blade',
+    name: 'Cube Blade',
+    type: 'sword',
+    tier: 5,
+    damage: [130, 200],
+    rateOfFire: 2.5,
+    range: 5,
+    projectileSpeed: 20,
+    numProjectiles: 2,
+    arcGap: 4,
+    piercing: true,
+    projectileId: 'cube_bullet',
+  },
+  cube_bow: {
+    id: 'cube_bow',
+    name: 'Bow of the Infinite',
+    type: 'bow',
+    tier: 5,
+    damage: [80, 130],
+    rateOfFire: 1.2,
+    range: 13,
+    projectileSpeed: 22,
+    numProjectiles: 4,
+    arcGap: 5,
+    piercing: false,
+    projectileId: 'cube_laser',
+  },
+  // Renamed T3 weapons for clarity
+  t3_staff: {
+    id: 't3_staff',
+    name: 'Arcane Staff',
+    type: 'staff',
+    tier: 3,
+    damage: [45, 70],
+    rateOfFire: 1.6,
+    range: 9.5,
+    projectileSpeed: 15,
+    numProjectiles: 2,
+    arcGap: 8,
+    piercing: false,
+    projectileId: 'fire_bolt',
+  },
+  t3_sword: {
+    id: 't3_sword',
+    name: 'Mithril Sword',
+    type: 'sword',
+    tier: 3,
+    damage: [55, 85],
+    rateOfFire: 2.5,
+    range: 4,
+    projectileSpeed: 16,
+    numProjectiles: 1,
+    arcGap: 0,
+    piercing: true,
+    projectileId: 'sword_slash',
+  },
+  t3_bow: {
+    id: 't3_bow',
+    name: 'Elvish Bow',
+    type: 'bow',
+    tier: 3,
+    damage: [30, 55],
+    rateOfFire: 1.5,
+    range: 8.5,
+    projectileSpeed: 18,
+    numProjectiles: 3,
+    arcGap: 6,
+    piercing: false,
+    projectileId: 'arrow',
+  },
 };
 
 export const ABILITIES: Record<string, AbilityDefinition> = {
@@ -464,6 +558,7 @@ export const ABILITIES: Record<string, AbilityDefinition> = {
 };
 
 export const ARMORS: Record<string, ArmorDefinition> = {
+  // T0 - Starter armors
   starter_robe: {
     id: 'starter_robe',
     name: 'Starter Robe',
@@ -491,9 +586,150 @@ export const ARMORS: Record<string, ArmorDefinition> = {
     hpBonus: 10,
     mpBonus: 5,
   },
+  // T1 - Basic armors
+  t1_robe: {
+    id: 't1_robe',
+    name: 'Apprentice Robe',
+    type: 'robe',
+    tier: 1,
+    defense: 4,
+    hpBonus: 10,
+    mpBonus: 20,
+  },
+  t1_heavy: {
+    id: 't1_heavy',
+    name: 'Iron Plate',
+    type: 'heavy',
+    tier: 1,
+    defense: 12,
+    hpBonus: 40,
+    mpBonus: 0,
+  },
+  t1_leather: {
+    id: 't1_leather',
+    name: 'Studded Leather',
+    type: 'leather',
+    tier: 1,
+    defense: 8,
+    hpBonus: 20,
+    mpBonus: 10,
+  },
+  // T2 - Intermediate armors
+  t2_robe: {
+    id: 't2_robe',
+    name: 'Mage Robe',
+    type: 'robe',
+    tier: 2,
+    defense: 7,
+    hpBonus: 20,
+    mpBonus: 35,
+  },
+  t2_heavy: {
+    id: 't2_heavy',
+    name: 'Steel Plate',
+    type: 'heavy',
+    tier: 2,
+    defense: 16,
+    hpBonus: 60,
+    mpBonus: 0,
+  },
+  t2_leather: {
+    id: 't2_leather',
+    name: 'Reinforced Leather',
+    type: 'leather',
+    tier: 2,
+    defense: 11,
+    hpBonus: 35,
+    mpBonus: 15,
+  },
+  // T3 - Advanced armors
+  t3_robe: {
+    id: 't3_robe',
+    name: 'Archmage Robe',
+    type: 'robe',
+    tier: 3,
+    defense: 10,
+    hpBonus: 35,
+    mpBonus: 55,
+  },
+  t3_heavy: {
+    id: 't3_heavy',
+    name: 'Mithril Plate',
+    type: 'heavy',
+    tier: 3,
+    defense: 22,
+    hpBonus: 90,
+    mpBonus: 0,
+  },
+  t3_leather: {
+    id: 't3_leather',
+    name: 'Dragon Hide',
+    type: 'leather',
+    tier: 3,
+    defense: 15,
+    hpBonus: 55,
+    mpBonus: 25,
+  },
+  // T4 - Epic armors (dungeon drops)
+  t4_robe: {
+    id: 't4_robe',
+    name: 'Robe of the Void',
+    type: 'robe',
+    tier: 4,
+    defense: 14,
+    hpBonus: 50,
+    mpBonus: 80,
+  },
+  t4_heavy: {
+    id: 't4_heavy',
+    name: 'Demon Plate',
+    type: 'heavy',
+    tier: 4,
+    defense: 28,
+    hpBonus: 120,
+    mpBonus: 0,
+  },
+  t4_leather: {
+    id: 't4_leather',
+    name: 'Abyssal Leather',
+    type: 'leather',
+    tier: 4,
+    defense: 20,
+    hpBonus: 80,
+    mpBonus: 40,
+  },
+  // T5 - Legendary armors (Cube Dimension)
+  t5_robe: {
+    id: 't5_robe',
+    name: 'Robe of the Infinite',
+    type: 'robe',
+    tier: 5,
+    defense: 18,
+    hpBonus: 70,
+    mpBonus: 110,
+  },
+  t5_heavy: {
+    id: 't5_heavy',
+    name: 'Cube Plate',
+    type: 'heavy',
+    tier: 5,
+    defense: 35,
+    hpBonus: 160,
+    mpBonus: 20,
+  },
+  t5_leather: {
+    id: 't5_leather',
+    name: 'Dimensional Leather',
+    type: 'leather',
+    tier: 5,
+    defense: 26,
+    hpBonus: 110,
+    mpBonus: 55,
+  },
 };
 
 export const RINGS: Record<string, RingDefinition> = {
+  // T1 - Basic stat rings
   hp_ring: {
     id: 'hp_ring',
     name: 'Ring of Health',
@@ -512,6 +748,7 @@ export const RINGS: Record<string, RingDefinition> = {
     tier: 1,
     stats: { attack: 3 },
   },
+  // T2 - Intermediate rings
   defense_ring: {
     id: 'defense_ring',
     name: 'Ring of Defense',
@@ -524,17 +761,69 @@ export const RINGS: Record<string, RingDefinition> = {
     tier: 2,
     stats: { speed: 5 },
   },
+  dexterity_ring: {
+    id: 'dexterity_ring',
+    name: 'Ring of Dexterity',
+    tier: 2,
+    stats: { dexterity: 5 },
+  },
+  vitality_ring: {
+    id: 'vitality_ring',
+    name: 'Ring of Vitality',
+    tier: 2,
+    stats: { vitality: 5 },
+  },
+  wisdom_ring: {
+    id: 'wisdom_ring',
+    name: 'Ring of Wisdom',
+    tier: 2,
+    stats: { wisdom: 5 },
+  },
+  // T3 - Combined stat rings
   power_ring: {
     id: 'power_ring',
     name: 'Ring of Power',
     tier: 3,
     stats: { attack: 5, hp: 20 },
   },
+  fortitude_ring: {
+    id: 'fortitude_ring',
+    name: 'Ring of Fortitude',
+    tier: 3,
+    stats: { defense: 6, vitality: 6, hp: 40 },
+  },
+  swiftness_ring: {
+    id: 'swiftness_ring',
+    name: 'Ring of Swiftness',
+    tier: 3,
+    stats: { speed: 6, dexterity: 6 },
+  },
+  arcana_ring: {
+    id: 'arcana_ring',
+    name: 'Ring of Arcana',
+    tier: 3,
+    stats: { mp: 60, wisdom: 6, attack: 3 },
+  },
+  // T4 - Epic rings
   omnipotence_ring: {
     id: 'omnipotence_ring',
     name: 'Ring of Omnipotence',
     tier: 4,
     stats: { hp: 80, mp: 80, attack: 8, defense: 8, speed: 8, dexterity: 8, vitality: 8, wisdom: 8 },
+  },
+  // T5 - Cube Dimension special ring
+  cube_ring: {
+    id: 'cube_ring',
+    name: 'Ring of the Cube',
+    tier: 5,
+    stats: { hp: 120, mp: 100, attack: 10, defense: 10, speed: 10, dexterity: 10, vitality: 10, wisdom: 10 },
+  },
+  // Admin ring - ridiculous stats
+  admin_crown: {
+    id: 'admin_crown',
+    name: 'Admin Crown',
+    tier: 99,
+    stats: { hp: 1000000, mp: 100000, attack: 1000, defense: 1000, speed: 50, dexterity: 100, vitality: 1000, wisdom: 1000 },
   },
 };
 
@@ -575,6 +864,25 @@ export const PROJECTILES: Record<string, ProjectileDefinition> = {
     size: 10,
     color: '#ff00ff',
   },
+  // Cube Dimension projectiles
+  cube_bullet: {
+    id: 'cube_bullet',
+    sprite: 'cube_bullet',
+    size: 7,
+    color: '#00ffff',
+  },
+  cube_laser: {
+    id: 'cube_laser',
+    sprite: 'cube_laser',
+    size: 4,
+    color: '#00ff88',
+  },
+  cube_nova: {
+    id: 'cube_nova',
+    sprite: 'cube_nova',
+    size: 8,
+    color: '#88ffff',
+  },
 };
 
 export const ENEMIES: Record<string, EnemyDefinition> = {
@@ -604,6 +912,9 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
       { itemId: 'short_sword', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'fire_wand', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'crossbow', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_robe', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_heavy', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_leather', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#8b0000',
   },
@@ -629,8 +940,11 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 10,
     lootTable: [
-      { itemId: 'hp_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'mp_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'hp_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'mp_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_robe', chance: 0.05, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_heavy', chance: 0.05, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_leather', chance: 0.05, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#228b22',
   },
@@ -656,11 +970,22 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 100,
     lootTable: [
-      { itemId: 'fire_staff', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'broad_sword', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'double_bow', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'attack_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'defense_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      // T2 weapons
+      { itemId: 'fire_staff', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'broad_sword', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'double_bow', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T2 armors
+      { itemId: 't2_robe', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_heavy', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_leather', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      // T2 rings
+      { itemId: 'defense_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'speed_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'dexterity_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'vitality_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'wisdom_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T1 attack ring (higher chance)
+      { itemId: 'attack_ring', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#8b008b',
   },
@@ -686,10 +1011,22 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 500,
     lootTable: [
-      { itemId: 'staff_of_destruction', chance: 0.4, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'golden_sword', chance: 0.4, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'heavy_crossbow', chance: 0.4, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'power_ring', chance: 0.5, minQuantity: 1, maxQuantity: 1 },
+      // T3 weapons
+      { itemId: 'staff_of_destruction', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'golden_sword', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'heavy_crossbow', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_staff', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_sword', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_bow', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      // T3 armors
+      { itemId: 't3_robe', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_heavy', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_leather', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T3 rings
+      { itemId: 'power_ring', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'fortitude_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'swiftness_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'arcana_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#00ffff',
   },
@@ -716,8 +1053,18 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 30,
     lootTable: [
-      { itemId: 'hp_ring', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'mp_ring', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      // T1 weapons (rare)
+      { itemId: 'fire_wand', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'short_sword', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'crossbow', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      // T1 armors
+      { itemId: 't1_robe', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_heavy', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_leather', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      // T1 rings
+      { itemId: 'hp_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'mp_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'attack_ring', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#555588',
   },
@@ -743,10 +1090,21 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 75,
     lootTable: [
+      // T2 weapons
       { itemId: 'fire_staff', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'broad_sword', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
       { itemId: 'double_bow', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'attack_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T2 armors
+      { itemId: 't2_robe', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_heavy', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_leather', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      // T2 rings
+      { itemId: 'attack_ring', chance: 0.18, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'defense_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'speed_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'dexterity_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'vitality_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'wisdom_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#884488',
   },
@@ -782,13 +1140,211 @@ export const ENEMIES: Record<string, EnemyDefinition> = {
     ],
     xpReward: 1000,
     lootTable: [
-      { itemId: 'doom_staff', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'demon_blade', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'doom_bow', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'omnipotence_ring', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
-      { itemId: 'power_ring', chance: 0.5, minQuantity: 1, maxQuantity: 1 },
+      // T4 weapons (soulbound)
+      { itemId: 'doom_staff', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'demon_blade', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'doom_bow', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      // T4 armors (soulbound)
+      { itemId: 't4_robe', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't4_heavy', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't4_leather', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T4 ring (soulbound)
+      { itemId: 'omnipotence_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      // T3 rings (higher chance)
+      { itemId: 'power_ring', chance: 0.4, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'fortitude_ring', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'swiftness_ring', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'arcana_ring', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
     ],
     color: '#ff0088',
+  },
+  // =====================
+  // CUBE DIMENSION ENEMIES
+  // =====================
+  cube_minion: {
+    id: 'cube_minion',
+    name: 'Cube Minion',
+    hp: 200,
+    defense: 8,
+    speed: 3,
+    radius: 0.35,
+    behavior: { type: 'chase', range: 12 },
+    attacks: [
+      {
+        projectileId: 'cube_bullet',
+        damage: [20, 35],
+        rateOfFire: 2,
+        range: 8,
+        projectileSpeed: 10,
+        numProjectiles: 4,
+        arcGap: 90, // Cross pattern
+        predictive: false,
+      },
+    ],
+    xpReward: 40,
+    lootTable: [
+      // T2 weapons (rare)
+      { itemId: 'fire_staff', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'broad_sword', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'double_bow', chance: 0.08, minQuantity: 1, maxQuantity: 1 },
+      // T2 armors
+      { itemId: 't2_robe', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_heavy', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't2_leather', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      // T2 rings
+      { itemId: 'dexterity_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'vitality_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'speed_ring', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+    ],
+    color: '#00cccc',
+  },
+  cube_drone: {
+    id: 'cube_drone',
+    name: 'Cube Drone',
+    hp: 100,
+    defense: 3,
+    speed: 4,
+    radius: 0.25,
+    behavior: { type: 'orbit', range: 6, speed: 3 },
+    attacks: [
+      {
+        projectileId: 'cube_bullet',
+        damage: [15, 25],
+        rateOfFire: 3,
+        range: 6,
+        projectileSpeed: 12,
+        numProjectiles: 2,
+        arcGap: 180,
+        predictive: true,
+      },
+    ],
+    xpReward: 25,
+    lootTable: [
+      // T1 armors
+      { itemId: 't1_robe', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_heavy', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't1_leather', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      // T1/T2 rings
+      { itemId: 'mp_ring', chance: 0.2, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'hp_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'wisdom_ring', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+    ],
+    color: '#44dddd',
+  },
+  cube_sentinel: {
+    id: 'cube_sentinel',
+    name: 'Cube Sentinel',
+    hp: 600,
+    defense: 20,
+    speed: 1.2,
+    radius: 0.6,
+    behavior: { type: 'orbit', range: 5, speed: 1.5 },
+    attacks: [
+      {
+        projectileId: 'cube_bullet',
+        damage: [40, 60],
+        rateOfFire: 2,
+        range: 10,
+        projectileSpeed: 8,
+        numProjectiles: 8,
+        arcGap: 45, // Full circle burst
+        predictive: false,
+      },
+      {
+        projectileId: 'cube_laser',
+        damage: [60, 80],
+        rateOfFire: 0.8,
+        range: 12,
+        projectileSpeed: 15,
+        numProjectiles: 1,
+        arcGap: 0,
+        predictive: true,
+      },
+    ],
+    xpReward: 100,
+    lootTable: [
+      // T3 weapons
+      { itemId: 't3_staff', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_sword', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_bow', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'staff_of_destruction', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'golden_sword', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'heavy_crossbow', chance: 0.1, minQuantity: 1, maxQuantity: 1 },
+      // T3 armors
+      { itemId: 't3_robe', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_heavy', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't3_leather', chance: 0.12, minQuantity: 1, maxQuantity: 1 },
+      // T3 rings
+      { itemId: 'power_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'fortitude_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'swiftness_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'arcana_ring', chance: 0.15, minQuantity: 1, maxQuantity: 1 },
+    ],
+    color: '#00aaaa',
+  },
+  cube_overlord: {
+    id: 'cube_overlord',
+    name: 'Cube Overlord',
+    hp: 6000,
+    defense: 25,
+    speed: 0.5,
+    radius: 1.5,
+    behavior: { type: 'stationary' },
+    attacks: [
+      // Attack 0: Spread bullets - 12 bullets in a ring
+      {
+        projectileId: 'cube_bullet',
+        damage: [50, 80],
+        rateOfFire: 3,
+        range: 16,
+        projectileSpeed: 5,
+        numProjectiles: 12,
+        arcGap: 30, // Full 360 coverage
+        predictive: false,
+      },
+      // Attack 1: Targeted laser bursts
+      {
+        projectileId: 'cube_laser',
+        damage: [60, 90],
+        rateOfFire: 2,
+        range: 14,
+        projectileSpeed: 12,
+        numProjectiles: 4,
+        arcGap: 8,
+        predictive: true,
+      },
+      // Attack 2: Inner ring defense - fast close bullets
+      {
+        projectileId: 'cube_nova',
+        damage: [40, 60],
+        rateOfFire: 4,
+        range: 8,
+        projectileSpeed: 10,
+        numProjectiles: 16,
+        arcGap: 22.5,
+        predictive: false,
+      },
+    ],
+    phases: [
+      // Phase 1 (100-66% HP): Just spread bullets, gentle intro
+      { hpPercent: 100, attackIndices: [0], attackDuration: 3, restDuration: 2 },
+      // Phase 2 (66-33% HP): Add lasers, more intense
+      { hpPercent: 66, attackIndices: [0, 1], attackDuration: 4, restDuration: 2 },
+      // Phase 3 (33-0% HP): All attacks, no rest - always firing
+      { hpPercent: 33, attackIndices: [0, 1, 2], attackDuration: 9999, restDuration: 0 },
+    ],
+    xpReward: 2000,
+    lootTable: [
+      { itemId: 'cube_staff', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'cube_blade', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'cube_bow', chance: 0.35, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'cube_ring', chance: 0.3, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 'omnipotence_ring', chance: 0.4, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't5_robe', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't5_heavy', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+      { itemId: 't5_leather', chance: 0.25, minQuantity: 1, maxQuantity: 1 },
+    ],
+    color: '#00ffff',
   },
 };
 
@@ -809,28 +1365,66 @@ export const ITEMS: Record<string, ItemDefinition> = {
   staff_of_destruction: { id: 'staff_of_destruction', name: 'Staff of Destruction', type: 'weapon', tier: 3, soulbound: false, description: 'Devastating magical power', color: '#ff0066' },
   golden_sword: { id: 'golden_sword', name: 'Golden Sword', type: 'weapon', tier: 3, soulbound: false, description: 'A sword of pure gold', color: '#ffd700' },
   heavy_crossbow: { id: 'heavy_crossbow', name: 'Heavy Crossbow', type: 'weapon', tier: 3, soulbound: false, description: 'Fires 3 heavy bolts', color: '#4a3728' },
+  t3_staff: { id: 't3_staff', name: 'Arcane Staff', type: 'weapon', tier: 3, soulbound: false, description: 'Powerful arcane magic', color: '#9944ff' },
+  t3_sword: { id: 't3_sword', name: 'Mithril Sword', type: 'weapon', tier: 3, soulbound: false, description: 'Forged from rare mithril', color: '#c0c0c0' },
+  t3_bow: { id: 't3_bow', name: 'Elvish Bow', type: 'weapon', tier: 3, soulbound: false, description: 'Crafted by elven artisans', color: '#228b22' },
+  // T4 Epic dungeon weapons
+  doom_staff: { id: 'doom_staff', name: 'Staff of Doom', type: 'weapon', tier: 4, soulbound: true, description: 'Fires devastating dark bolts', color: '#440066' },
+  demon_blade: { id: 'demon_blade', name: 'Demon Blade', type: 'weapon', tier: 4, soulbound: true, description: 'A sword forged in hellfire', color: '#ff2200' },
+  doom_bow: { id: 'doom_bow', name: 'Doom Bow', type: 'weapon', tier: 4, soulbound: true, description: 'Fires a single devastating arrow', color: '#222222' },
+  // T5 Cube Dimension weapons
+  cube_staff: { id: 'cube_staff', name: 'Staff of the Cube', type: 'weapon', tier: 5, soulbound: true, description: 'Harnesses dimensional energy', color: '#00ffff' },
+  cube_blade: { id: 'cube_blade', name: 'Cube Blade', type: 'weapon', tier: 5, soulbound: true, description: 'Slices through dimensions', color: '#00dddd' },
+  cube_bow: { id: 'cube_bow', name: 'Bow of the Infinite', type: 'weapon', tier: 5, soulbound: true, description: 'Fires lasers from another dimension', color: '#00ff88' },
   // Abilities
   starter_spell: { id: 'starter_spell', name: 'Magic Nova', type: 'ability', tier: 0, soulbound: true, description: 'A basic spell', color: '#4488ff' },
   starter_helm: { id: 'starter_helm', name: 'Bronze Helm', type: 'ability', tier: 0, soulbound: true, description: 'A basic helm', color: '#cd7f32' },
   starter_quiver: { id: 'starter_quiver', name: 'Basic Quiver', type: 'ability', tier: 0, soulbound: true, description: 'A basic quiver', color: '#8b4513' },
-  // Armors
+  // T0 Armors
   starter_robe: { id: 'starter_robe', name: 'Starter Robe', type: 'armor', tier: 0, soulbound: true, description: 'A basic robe', color: '#4444aa' },
   starter_heavy: { id: 'starter_heavy', name: 'Starter Plate', type: 'armor', tier: 0, soulbound: true, description: 'Basic plate armor', color: '#888888' },
   starter_leather: { id: 'starter_leather', name: 'Starter Leather', type: 'armor', tier: 0, soulbound: true, description: 'Basic leather armor', color: '#8b4513' },
-  // Rings - T1
+  // T1 Armors
+  t1_robe: { id: 't1_robe', name: 'Apprentice Robe', type: 'armor', tier: 1, soulbound: false, description: 'A decent robe for mages', color: '#5555bb' },
+  t1_heavy: { id: 't1_heavy', name: 'Iron Plate', type: 'armor', tier: 1, soulbound: false, description: 'Solid iron protection', color: '#999999' },
+  t1_leather: { id: 't1_leather', name: 'Studded Leather', type: 'armor', tier: 1, soulbound: false, description: 'Leather with metal studs', color: '#996644' },
+  // T2 Armors
+  t2_robe: { id: 't2_robe', name: 'Mage Robe', type: 'armor', tier: 2, soulbound: false, description: 'Enchanted for magic users', color: '#6666cc' },
+  t2_heavy: { id: 't2_heavy', name: 'Steel Plate', type: 'armor', tier: 2, soulbound: false, description: 'Forged steel armor', color: '#aaaaaa' },
+  t2_leather: { id: 't2_leather', name: 'Reinforced Leather', type: 'armor', tier: 2, soulbound: false, description: 'Hardened leather armor', color: '#aa7755' },
+  // T3 Armors
+  t3_robe: { id: 't3_robe', name: 'Archmage Robe', type: 'armor', tier: 3, soulbound: false, description: 'Worn by powerful mages', color: '#7777dd' },
+  t3_heavy: { id: 't3_heavy', name: 'Mithril Plate', type: 'armor', tier: 3, soulbound: false, description: 'Legendary mithril armor', color: '#c0c0c0' },
+  t3_leather: { id: 't3_leather', name: 'Dragon Hide', type: 'armor', tier: 3, soulbound: false, description: 'Made from dragon scales', color: '#cc8866' },
+  // T4 Armors
+  t4_robe: { id: 't4_robe', name: 'Robe of the Void', type: 'armor', tier: 4, soulbound: true, description: 'Woven from dark energy', color: '#220044' },
+  t4_heavy: { id: 't4_heavy', name: 'Demon Plate', type: 'armor', tier: 4, soulbound: true, description: 'Forged in demon fire', color: '#880000' },
+  t4_leather: { id: 't4_leather', name: 'Abyssal Leather', type: 'armor', tier: 4, soulbound: true, description: 'From the depths of the abyss', color: '#442266' },
+  // T5 Armors
+  t5_robe: { id: 't5_robe', name: 'Robe of the Infinite', type: 'armor', tier: 5, soulbound: true, description: 'Transcends space and time', color: '#0088ff' },
+  t5_heavy: { id: 't5_heavy', name: 'Cube Plate', type: 'armor', tier: 5, soulbound: true, description: 'Dimensional alloy armor', color: '#00cccc' },
+  t5_leather: { id: 't5_leather', name: 'Dimensional Leather', type: 'armor', tier: 5, soulbound: true, description: 'Phases through attacks', color: '#00aa88' },
+  // T1 Rings
   hp_ring: { id: 'hp_ring', name: 'Ring of Health', type: 'ring', tier: 1, soulbound: false, description: '+20 HP', color: '#ff4444' },
   mp_ring: { id: 'mp_ring', name: 'Ring of Magic', type: 'ring', tier: 1, soulbound: false, description: '+20 MP', color: '#4444ff' },
   attack_ring: { id: 'attack_ring', name: 'Ring of Attack', type: 'ring', tier: 1, soulbound: false, description: '+3 Attack', color: '#ff8844' },
-  // Rings - T2
+  // T2 Rings
   defense_ring: { id: 'defense_ring', name: 'Ring of Defense', type: 'ring', tier: 2, soulbound: false, description: '+5 Defense', color: '#44ff44' },
   speed_ring: { id: 'speed_ring', name: 'Ring of Speed', type: 'ring', tier: 2, soulbound: false, description: '+5 Speed', color: '#44ffff' },
-  // Rings - T3
+  dexterity_ring: { id: 'dexterity_ring', name: 'Ring of Dexterity', type: 'ring', tier: 2, soulbound: false, description: '+5 Dexterity', color: '#ffff44' },
+  vitality_ring: { id: 'vitality_ring', name: 'Ring of Vitality', type: 'ring', tier: 2, soulbound: false, description: '+5 Vitality', color: '#ff44ff' },
+  wisdom_ring: { id: 'wisdom_ring', name: 'Ring of Wisdom', type: 'ring', tier: 2, soulbound: false, description: '+5 Wisdom', color: '#44aaff' },
+  // T3 Rings
   power_ring: { id: 'power_ring', name: 'Ring of Power', type: 'ring', tier: 3, soulbound: false, description: '+5 Attack, +20 HP', color: '#ff00ff' },
-  // T4 Epic dungeon drops
-  doom_staff: { id: 'doom_staff', name: 'Staff of Doom', type: 'weapon', tier: 4, soulbound: true, description: 'Fires devastating dark bolts', color: '#440066' },
-  demon_blade: { id: 'demon_blade', name: 'Demon Blade', type: 'weapon', tier: 4, soulbound: true, description: 'A sword forged in hellfire', color: '#ff2200' },
-  doom_bow: { id: 'doom_bow', name: 'Doom Bow', type: 'weapon', tier: 4, soulbound: true, description: 'Fires a single devastating arrow', color: '#222222' },
+  fortitude_ring: { id: 'fortitude_ring', name: 'Ring of Fortitude', type: 'ring', tier: 3, soulbound: false, description: '+6 Defense, +6 Vitality, +40 HP', color: '#00ff00' },
+  swiftness_ring: { id: 'swiftness_ring', name: 'Ring of Swiftness', type: 'ring', tier: 3, soulbound: false, description: '+6 Speed, +6 Dexterity', color: '#00ffff' },
+  arcana_ring: { id: 'arcana_ring', name: 'Ring of Arcana', type: 'ring', tier: 3, soulbound: false, description: '+60 MP, +6 Wisdom, +3 Attack', color: '#8800ff' },
+  // T4 Rings
   omnipotence_ring: { id: 'omnipotence_ring', name: 'Ring of Omnipotence', type: 'ring', tier: 4, soulbound: true, description: '+8 All Stats', color: '#ffdd00' },
+  // T5 Rings
+  cube_ring: { id: 'cube_ring', name: 'Ring of the Cube', type: 'ring', tier: 5, soulbound: true, description: '+10 All Stats, Best in game', color: '#00ffff' },
+  // Admin item
+  admin_crown: { id: 'admin_crown', name: 'Admin Crown', type: 'ring', tier: 99, soulbound: true, description: 'Absolute power', color: '#ffd700' },
 };
 
 // Helper functions
@@ -865,7 +1459,7 @@ export function getStarterEquipment(classId: string): (string | null)[] {
 }
 
 export function getExpForLevel(level: number): number {
-  return Math.floor(100 * Math.pow(1.5, level - 1));
+  return Math.floor(100 * Math.pow(1.3, level - 1));
 }
 
 export const MAX_LEVEL = 20;
@@ -874,3 +1468,69 @@ export const PLAYER_RADIUS = 0.35;
 export const PICKUP_RANGE = 1;
 export const PORTAL_INTERACT_RANGE = 1.5;
 export const AOI_RADIUS = 15; // Area of interest radius in tiles
+
+// Vault constants
+export const VAULT_SIZE = 8; // Number of vault slots
+export const VAULT_CHEST_INTERACT_RANGE = 1.5; // Range to interact with vault chest
+
+// =====================
+// DUNGEON DEFINITIONS
+// =====================
+
+export interface DungeonDefinition {
+  id: string;
+  name: string;
+  portalName: string;
+  portalColor: string;
+  mapSize: number;
+  roomCount: [number, number]; // min, max
+  bossId: string;
+  minionIds: string[];
+  guardianIds: string[];
+  floorColor: string;
+  wallColor: string;
+}
+
+export const DUNGEONS: Record<string, DungeonDefinition> = {
+  demon_lair: {
+    id: 'demon_lair',
+    name: 'Demon Lair',
+    portalName: 'Demon Lair',
+    portalColor: '#8b008b',
+    mapSize: 150,
+    roomCount: [12, 18],
+    bossId: 'dungeon_boss',
+    minionIds: ['dungeon_minion'],
+    guardianIds: ['dungeon_guardian'],
+    floorColor: '#333333',
+    wallColor: '#1a1a1a',
+  },
+  cube_dimension: {
+    id: 'cube_dimension',
+    name: 'Cube Dimension',
+    portalName: 'Cube Dimension',
+    portalColor: '#00ffff',
+    mapSize: 200,
+    roomCount: [15, 22],
+    bossId: 'cube_overlord',
+    minionIds: ['cube_minion', 'cube_drone'],
+    guardianIds: ['cube_sentinel'],
+    floorColor: '#112233',
+    wallColor: '#001122',
+  },
+};
+
+// Helper to get dungeon that spawns from a given enemy
+export function getDungeonForEnemy(enemyId: string): string | null {
+  switch (enemyId) {
+    case 'demon': return 'demon_lair';
+    case 'cube_god': return 'cube_dimension';
+    default: return null;
+  }
+}
+
+// Drop chance for dungeons
+export const DUNGEON_DROP_CHANCE: Record<string, number> = {
+  demon: 0.1,
+  cube_god: 0.15,
+};

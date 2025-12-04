@@ -3,6 +3,9 @@ import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 import { v4 as uuid } from 'uuid';
 import { encode, decode } from '@msgpack/msgpack';
+import { existsSync, readFileSync, watchFile } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import {
   ClientMessage,
   ServerMessage,
@@ -14,12 +17,19 @@ import {
   ABILITIES,
   ITEMS,
   Vec2,
+  DUNGEONS,
+  getDungeonForEnemy,
+  DUNGEON_DROP_CHANCE,
+  ENEMIES,
+  VAULT_SIZE,
+  VAULT_CHEST_INTERACT_RANGE,
 } from '@rotmg/shared';
 import { GameLoop } from '../game/GameLoop.js';
 import { Instance } from '../instances/Instance.js';
 import { GameMap, DungeonMapResult } from '../game/GameMap.js';
 import { PlayerEntity } from '../game/PlayerEntity.js';
 import { PortalEntity } from '../game/PortalEntity.js';
+import { VaultChestEntity } from '../game/VaultChestEntity.js';
 import { GameDatabase } from '../persistence/Database.js';
 
 interface ClientSession {
@@ -32,6 +42,8 @@ interface ClientSession {
   inputCount: number;
   authAttempts: number;
   lastAuthAttempt: number;
+  vaultOpen: boolean;
+  vaultItems: (string | null)[];
 }
 
 export class GameServer {
@@ -42,10 +54,16 @@ export class GameServer {
   private playerToClient: Map<string, WebSocket> = new Map();
   private nexusInstance: Instance;
   private realmInstance: Instance;
+  private adminUsernames: Set<string> = new Set();
+  private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
+  private vaultInstances: Map<string, Instance> = new Map(); // keyed by accountId
 
   constructor(port: number, database: GameDatabase) {
     this.database = database;
     this.gameLoop = new GameLoop(20); // 20 ticks per second
+
+    // Load admin list
+    this.loadAdminList();
 
     // Create instances
     this.nexusInstance = new Instance('nexus', GameMap.createNexusMap(), 'nexus-main');
@@ -74,6 +92,15 @@ export class GameServer {
       'Nexus Portal'
     );
     this.realmInstance.addPortal(nexusPortal);
+
+    // Vault portal in Nexus (special - creates personal instances)
+    const vaultPortal = new PortalEntity(
+      { x: 10, y: 10 },
+      'vault', // Special marker - actual instance created on entry
+      'vault',
+      'Vault'
+    );
+    this.nexusInstance.addPortal(vaultPortal);
 
     // WebSocket server with origin validation
     this.wss = new WebSocketServer({
@@ -110,6 +137,8 @@ export class GameServer {
       inputCount: 0,
       authAttempts: 0,
       lastAuthAttempt: 0,
+      vaultOpen: false,
+      vaultItems: [],
     };
     this.clients.set(ws, session);
 
@@ -218,6 +247,18 @@ export class GameServer {
       case 'dropItem':
         this.handleDropItem(session, message.data.slot);
         break;
+
+      case 'interactVaultChest':
+        this.handleInteractVaultChest(session);
+        break;
+
+      case 'vaultTransfer':
+        this.handleVaultTransfer(session, message.data.fromVault, message.data.fromSlot, message.data.toSlot);
+        break;
+
+      case 'closeVault':
+        this.handleCloseVault(session);
+        break;
     }
   }
 
@@ -236,6 +277,146 @@ export class GameServer {
     }
 
     return { valid: true };
+  }
+
+  private loadAdminList(): void {
+    try {
+      const adminFilePath = join(process.cwd(), 'data', 'admins.txt');
+      if (existsSync(adminFilePath)) {
+        const content = readFileSync(adminFilePath, 'utf-8');
+        this.adminUsernames.clear();
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#')) {
+            this.adminUsernames.add(trimmed.toLowerCase());
+          }
+        }
+        console.log(`Loaded ${this.adminUsernames.size} admin(s): ${Array.from(this.adminUsernames).join(', ')}`);
+
+        // Watch for changes to the admin file
+        watchFile(adminFilePath, () => {
+          console.log('Admin file changed, reloading...');
+          this.loadAdminList();
+        });
+      } else {
+        console.log('No admins.txt file found, no admins configured');
+      }
+    } catch (e) {
+      console.error('Failed to load admin list:', e);
+    }
+  }
+
+  private isAdmin(username: string): boolean {
+    return this.adminUsernames.has(username.toLowerCase());
+  }
+
+  private handleAdminCommand(session: ClientSession, player: PlayerEntity, command: string): boolean {
+    // Check if user is admin
+    const account = this.database.getAccount(session.accountId!);
+    if (!account || !this.isAdmin(account.username)) {
+      return false;
+    }
+
+    const args = command.slice(1).split(' '); // Remove leading /
+    const cmd = args[0].toLowerCase();
+
+    switch (cmd) {
+      case 'give': {
+        // /give <item_id>
+        const itemId = args[1];
+        if (!itemId) {
+          this.sendChatToPlayer(player, 'System', 'Usage: /give <item_id>');
+          return true;
+        }
+        if (!ITEMS[itemId]) {
+          this.sendChatToPlayer(player, 'System', `Unknown item: ${itemId}`);
+          return true;
+        }
+        if (player.addToInventory(itemId)) {
+          this.sendChatToPlayer(player, 'System', `Given: ${ITEMS[itemId].name}`);
+        } else {
+          this.sendChatToPlayer(player, 'System', 'Inventory full!');
+        }
+        return true;
+      }
+
+      case 'items': {
+        // /items - List all available items
+        const itemTypes = ['weapon', 'ability', 'armor', 'ring'];
+        const filter = args[1]?.toLowerCase();
+        let items = Object.keys(ITEMS);
+        if (filter && itemTypes.includes(filter)) {
+          items = items.filter(id => ITEMS[id].type === filter);
+        }
+        this.sendChatToPlayer(player, 'System', `Items (${items.length}): ${items.slice(0, 20).join(', ')}${items.length > 20 ? '...' : ''}`);
+        return true;
+      }
+
+      case 'heal': {
+        // /heal - Restore HP/MP to max
+        player.hp = player.getEffectiveMaxHp();
+        player.mp = player.getEffectiveMaxMp();
+        this.sendChatToPlayer(player, 'System', 'Fully healed!');
+        return true;
+      }
+
+      case 'level': {
+        // /level <level> - Set player level
+        const level = parseInt(args[1]) || 20;
+        while (player.level < level && player.level < 20) {
+          player.addExp(99999);
+        }
+        this.sendChatToPlayer(player, 'System', `Level set to ${player.level}`);
+        return true;
+      }
+
+      case 'spawn': {
+        // /spawn <enemy_id> - Spawn an enemy at player position
+        const enemyId = args[1];
+        if (!enemyId || !ENEMIES[enemyId]) {
+          this.sendChatToPlayer(player, 'System', `Usage: /spawn <enemy_id>. Available: ${Object.keys(ENEMIES).slice(0, 10).join(', ')}...`);
+          return true;
+        }
+        const instance = this.gameLoop.getInstance(session.instanceId!);
+        if (instance) {
+          instance.spawnEnemy(enemyId, { ...player.position });
+          this.sendChatToPlayer(player, 'System', `Spawned ${ENEMIES[enemyId].name}`);
+        }
+        return true;
+      }
+
+      case 'tp': {
+        // /tp <x> <y> - Teleport to coordinates
+        const x = parseFloat(args[1]);
+        const y = parseFloat(args[2]);
+        if (isNaN(x) || isNaN(y)) {
+          this.sendChatToPlayer(player, 'System', 'Usage: /tp <x> <y>');
+          return true;
+        }
+        player.position.x = x;
+        player.position.y = y;
+        this.sendChatToPlayer(player, 'System', `Teleported to (${x}, ${y})`);
+        return true;
+      }
+
+      case 'help': {
+        this.sendChatToPlayer(player, 'System', 'Admin commands: /give, /items, /heal, /level, /spawn, /tp, /help');
+        return true;
+      }
+
+      default:
+        return false;
+    }
+  }
+
+  private sendChatToPlayer(player: PlayerEntity, sender: string, message: string): void {
+    const ws = this.playerToClient.get(player.id);
+    if (ws) {
+      this.send(ws, {
+        type: 'chat',
+        data: { sender, message, timestamp: Date.now() },
+      });
+    }
   }
 
   private checkAuthRateLimit(session: ClientSession): boolean {
@@ -572,7 +753,7 @@ export class GameServer {
   }
 
   private handleEnterPortal(session: ClientSession, portalId: string): void {
-    if (!session.playerId || !session.instanceId) return;
+    if (!session.playerId || !session.instanceId || !session.accountId) return;
 
     const instance = this.gameLoop.getInstance(session.instanceId);
     if (!instance) return;
@@ -582,6 +763,13 @@ export class GameServer {
 
     const portal = instance.tryEnterPortal(player, portalId);
     if (!portal) return;
+
+    // Handle vault portal specially - create personal instance
+    if (portal.targetType === 'vault') {
+      const vaultInstance = this.getOrCreateVaultInstance(session.accountId);
+      this.transferPlayerToInstance(session, player, instance, vaultInstance);
+      return;
+    }
 
     // Transfer player to new instance
     const targetInstance = this.gameLoop.getInstance(portal.targetInstance);
@@ -627,8 +815,170 @@ export class GameServer {
 
     if (!itemId) return;
 
+    // Cap HP/MP if armor or ring was dropped
+    if (slot === 2 || slot === 3) {
+      const effectiveMaxHp = player.getEffectiveMaxHp();
+      const effectiveMaxMp = player.getEffectiveMaxMp();
+      if (player.hp > effectiveMaxHp) {
+        player.hp = effectiveMaxHp;
+      }
+      if (player.mp > effectiveMaxMp) {
+        player.mp = effectiveMaxMp;
+      }
+    }
+
     // Try to drop into existing nearby loot bag, or create new one
     instance.dropItem(player, itemId);
+  }
+
+  private getOrCreateVaultInstance(accountId: string): Instance {
+    // Check if vault instance already exists for this account
+    let vaultInstance = this.vaultInstances.get(accountId);
+    if (vaultInstance) {
+      return vaultInstance;
+    }
+
+    // Create new vault instance
+    const vaultMapResult = GameMap.createVaultMap();
+    const vaultId = `vault-${accountId}`;
+    vaultInstance = new Instance('vault', vaultMapResult.map, vaultId);
+    vaultInstance.setGameServer(this);
+
+    // Add vault chest
+    const vaultChest = new VaultChestEntity(vaultMapResult.chestPosition, 'vault-chest');
+    vaultInstance.addVaultChest(vaultChest);
+
+    // Add return portal to nexus
+    const returnPortal = new PortalEntity(
+      { x: 7.5, y: 12.5 },
+      'nexus-main',
+      'nexus',
+      'Nexus Portal'
+    );
+    vaultInstance.addPortal(returnPortal);
+
+    // Register instance
+    this.gameLoop.addInstance(vaultInstance);
+    this.vaultInstances.set(accountId, vaultInstance);
+
+    console.log(`Created vault instance for account ${accountId}`);
+    return vaultInstance;
+  }
+
+  private handleInteractVaultChest(session: ClientSession): void {
+    if (!session.playerId || !session.instanceId || !session.accountId) return;
+
+    const instance = this.gameLoop.getInstance(session.instanceId);
+    if (!instance) return;
+
+    // Security: Only allow vault interaction in vault instance
+    if (instance.type !== 'vault') {
+      console.warn(`Player ${session.playerId} tried to interact with vault outside vault instance`);
+      return;
+    }
+
+    // Security: Verify this is the player's own vault
+    if (instance.id !== `vault-${session.accountId}`) {
+      console.warn(`Player ${session.playerId} tried to access another player's vault`);
+      return;
+    }
+
+    const player = instance.getPlayer(session.playerId);
+    if (!player) return;
+
+    // Check distance to vault chest
+    const vaultChest = instance.getFirstVaultChest();
+    if (!vaultChest) return;
+
+    const dist = player.distanceTo(vaultChest);
+    if (dist > VAULT_CHEST_INTERACT_RANGE) return;
+
+    // Load vault items from database
+    let vaultItems = this.database.getVaultItems(session.accountId);
+
+    // Initialize vault if empty (ensure VAULT_SIZE slots)
+    if (vaultItems.length < VAULT_SIZE) {
+      vaultItems = Array(VAULT_SIZE).fill(null);
+      this.database.saveVaultItems(session.accountId, vaultItems);
+    }
+
+    // Store vault items in session for transfer operations
+    session.vaultItems = [...vaultItems];
+    session.vaultOpen = true;
+
+    // Send vault contents to client
+    this.send(session.ws, {
+      type: 'vaultOpen',
+      data: { vaultItems: session.vaultItems },
+    });
+  }
+
+  private handleVaultTransfer(session: ClientSession, fromVault: boolean, fromSlot: number, toSlot: number): void {
+    if (!session.playerId || !session.instanceId || !session.accountId) return;
+    if (!session.vaultOpen) return;
+
+    const instance = this.gameLoop.getInstance(session.instanceId);
+    if (!instance) return;
+
+    // Security: Only allow in vault instance
+    if (instance.type !== 'vault') return;
+
+    // Security: Verify own vault
+    if (instance.id !== `vault-${session.accountId}`) return;
+
+    const player = instance.getPlayer(session.playerId);
+    if (!player) return;
+
+    // Validate slot ranges
+    // Vault slots: 0-7 (VAULT_SIZE)
+    // Inventory slots: 0-7 (8 slots)
+    if (fromVault) {
+      if (fromSlot < 0 || fromSlot >= VAULT_SIZE) return;
+      if (toSlot < 0 || toSlot >= 8) return;
+    } else {
+      if (fromSlot < 0 || fromSlot >= 8) return;
+      if (toSlot < 0 || toSlot >= VAULT_SIZE) return;
+    }
+
+    // Perform atomic transfer
+    if (fromVault) {
+      // Vault -> Inventory
+      const vaultItem = session.vaultItems[fromSlot];
+      const invItem = player.inventory[toSlot];
+
+      // Swap items (both can be null)
+      session.vaultItems[fromSlot] = invItem;
+      player.inventory[toSlot] = vaultItem;
+    } else {
+      // Inventory -> Vault
+      const invItem = player.inventory[fromSlot];
+      const vaultItem = session.vaultItems[toSlot];
+
+      // Swap items (both can be null)
+      player.inventory[fromSlot] = vaultItem;
+      session.vaultItems[toSlot] = invItem;
+    }
+
+    // Save vault to database immediately for security
+    this.database.saveVaultItems(session.accountId, session.vaultItems);
+
+    // Send updated vault contents to client
+    this.send(session.ws, {
+      type: 'vaultUpdate',
+      data: { vaultItems: session.vaultItems },
+    });
+  }
+
+  private handleCloseVault(session: ClientSession): void {
+    if (!session.accountId) return;
+
+    if (session.vaultOpen && session.vaultItems.length > 0) {
+      // Save vault items before closing
+      this.database.saveVaultItems(session.accountId, session.vaultItems);
+    }
+
+    session.vaultOpen = false;
+    session.vaultItems = [];
   }
 
   private transferPlayerToInstance(
@@ -684,6 +1034,14 @@ export class GameServer {
     const trimmed = message.trim();
     if (!trimmed || trimmed.length > 200) return;
 
+    // Check for admin commands (starts with /)
+    if (trimmed.startsWith('/')) {
+      if (this.handleAdminCommand(session, player, trimmed)) {
+        return; // Command handled, don't broadcast
+      }
+      // Not an admin or invalid command - fall through to broadcast as normal chat
+    }
+
     const sanitized = this.sanitizeHtml(trimmed);
 
     // Broadcast to nearby players
@@ -728,33 +1086,51 @@ export class GameServer {
 
     if (!from || !to) return;
 
-    // Validate equipment compatibility if moving to equipment slot
-    if (toSlot < 4 && from.array[from.index]) {
-      const itemId = from.array[from.index]!;
+    const cls = CLASSES[player.classId];
+    if (!cls) return;
+
+    const slotTypes = ['weapon', 'ability', 'armor', 'ring'];
+
+    // Helper to validate if an item can go into a specific equipment slot
+    const isValidForEquipmentSlot = (itemId: string | null, equipSlot: number): boolean => {
+      if (itemId === null) return true; // null is always valid (clearing slot)
+
       const item = ITEMS[itemId];
-      if (!item) return;
+      if (!item) return false; // Unknown items are not valid
 
       // Check slot type compatibility
-      const slotTypes = ['weapon', 'ability', 'armor', 'ring'];
-      if (item.type !== slotTypes[toSlot]) {
-        // Can't put wrong item type in equipment slot
-        return;
-      }
+      if (item.type !== slotTypes[equipSlot]) return false;
 
       // Check class compatibility for weapons/abilities/armor
-      if (toSlot < 3) {
-        const cls = CLASSES[player.classId];
-        if (!cls) return;
+      if (equipSlot === 0) {
+        // Weapon slot - check weapon type
+        const weapon = WEAPONS[itemId];
+        if (weapon && weapon.type !== cls.weaponType) return false;
+      } else if (equipSlot === 1) {
+        // Ability slot - check ability type
+        const ability = ABILITIES[itemId];
+        if (ability && ability.type !== cls.abilityType) return false;
+      } else if (equipSlot === 2) {
+        // Armor slot - check armor type
+        const armor = ARMORS[itemId];
+        if (armor && armor.type !== cls.armorType) return false;
+      }
+      // Ring slot (3) has no class restriction
 
-        if (toSlot === 0) {
-          // Weapon slot - check weapon type
-          const weapon = WEAPONS[itemId];
-          if (weapon && weapon.type !== cls.weaponType) return;
-        } else if (toSlot === 2) {
-          // Armor slot - check armor type
-          const armor = ARMORS[itemId];
-          if (armor && armor.type !== cls.armorType) return;
-        }
+      return true;
+    };
+
+    // Validate item going into toSlot (if toSlot is equipment slot)
+    if (toSlot < 4) {
+      if (!isValidForEquipmentSlot(from.array[from.index], toSlot)) {
+        return;
+      }
+    }
+
+    // Validate item going into fromSlot (if fromSlot is equipment slot) - this is the swap direction
+    if (fromSlot < 4) {
+      if (!isValidForEquipmentSlot(to.array[to.index], fromSlot)) {
+        return;
       }
     }
 
@@ -762,9 +1138,26 @@ export class GameServer {
     const temp = from.array[from.index];
     from.array[from.index] = to.array[to.index];
     to.array[to.index] = temp;
+
+    // Cap HP/MP to new effective max if armor or ring slot was involved
+    if (fromSlot === 2 || fromSlot === 3 || toSlot === 2 || toSlot === 3) {
+      const effectiveMaxHp = player.getEffectiveMaxHp();
+      const effectiveMaxMp = player.getEffectiveMaxMp();
+      if (player.hp > effectiveMaxHp) {
+        player.hp = effectiveMaxHp;
+      }
+      if (player.mp > effectiveMaxMp) {
+        player.mp = effectiveMaxMp;
+      }
+    }
   }
 
   private handleDisconnect(session: ClientSession): void {
+    // Save vault if open
+    if (session.accountId && session.vaultOpen && session.vaultItems.length > 0) {
+      this.database.saveVaultItems(session.accountId, session.vaultItems);
+    }
+
     if (session.playerId && session.instanceId) {
       const instance = this.gameLoop.getInstance(session.instanceId);
       if (instance) {
@@ -772,6 +1165,13 @@ export class GameServer {
         if (player && session.characterId) {
           // Save character state
           this.database.saveCharacter(player.toCharacterData());
+        }
+
+        // Clean up vault instance if empty
+        if (instance.type === 'vault' && instance.getPlayerCount() === 0 && session.accountId) {
+          this.gameLoop.removeInstance(instance.id);
+          this.vaultInstances.delete(session.accountId);
+          console.log(`Cleaned up vault instance for account ${session.accountId}`);
         }
       }
       this.playerToClient.delete(session.playerId);
@@ -828,18 +1228,55 @@ export class GameServer {
 
   start(): void {
     this.gameLoop.start();
+    this.startAutoSave();
+  }
+
+  private startAutoSave(): void {
+    // Auto-save all active player characters every 30 seconds
+    this.autoSaveInterval = setInterval(() => {
+      this.saveAllPlayers();
+    }, 30000);
+    console.log('Auto-save enabled (every 30 seconds)');
+  }
+
+  private saveAllPlayers(): void {
+    let savedCount = 0;
+    for (const [, session] of this.clients) {
+      if (session.playerId && session.instanceId && session.characterId) {
+        const instance = this.gameLoop.getInstance(session.instanceId);
+        if (instance) {
+          const player = instance.getPlayer(session.playerId);
+          if (player) {
+            this.database.saveCharacter(player.toCharacterData());
+            savedCount++;
+          }
+        }
+      }
+    }
+    if (savedCount > 0) {
+      console.log(`Auto-saved ${savedCount} player(s)`);
+    }
   }
 
   stop(): void {
+    // Clear auto-save interval
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
+      this.autoSaveInterval = null;
+    }
+    // Save all players before shutdown
+    this.saveAllPlayers();
     this.gameLoop.stop();
     this.wss.close();
   }
 
   // Create a dungeon instance and spawn a portal to it at the given position
-  spawnDungeonPortal(sourceInstance: Instance, position: Vec2): void {
+  spawnDungeonPortal(sourceInstance: Instance, position: Vec2, dungeonType: string = 'demon_lair'): void {
+    const dungeonDef = DUNGEONS[dungeonType] || DUNGEONS['demon_lair'];
+
     // Create new dungeon
     const dungeonId = `dungeon-${uuid()}`;
-    const dungeonResult = GameMap.createDungeonMap();
+    const dungeonResult = GameMap.createDungeonMap(dungeonType);
     const dungeonInstance = new Instance('dungeon', dungeonResult.map, dungeonId);
     dungeonInstance.setGameServer(this);
     this.gameLoop.addInstance(dungeonInstance);
@@ -856,12 +1293,12 @@ export class GameServer {
       position,
       dungeonId,
       'dungeon',
-      'Demon Lair',
+      dungeonDef.portalName,
       120 // 2 minutes lifetime
     );
     sourceInstance.addPortal(dungeonPortal);
 
-    console.log(`Spawned dungeon portal at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}) -> ${dungeonId}`);
+    console.log(`Spawned ${dungeonDef.name} portal at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}) -> ${dungeonId}`);
   }
 
   // Called when dungeon boss is killed - spawn return portal

@@ -449,6 +449,57 @@
       color: #666;
       margin-top: 10px;
     }
+    /* Vault panel */
+    #vault-panel {
+      position: absolute;
+      bottom: 10px;
+      right: 220px;
+      background: rgba(20, 20, 35, 0.95);
+      border: 2px solid #7b5;
+      border-radius: 8px;
+      padding: 15px;
+      min-width: 200px;
+      z-index: 100;
+      pointer-events: auto;
+    }
+    #vault-panel.hidden {
+      display: none;
+    }
+    .vault-title {
+      font-size: 14px;
+      color: #7b5;
+      margin-bottom: 10px;
+      text-align: center;
+      border-bottom: 1px solid #444;
+      padding-bottom: 8px;
+    }
+    #vault-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 40px);
+      gap: 5px;
+    }
+    .vault-slot {
+      width: 40px;
+      height: 40px;
+      background: #2a3a2a;
+      border: 1px solid #5a5;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      user-select: none;
+      cursor: pointer;
+    }
+    .vault-slot:hover {
+      border-color: #8c8;
+    }
+    .vault-hint {
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+      margin-top: 10px;
+    }
     /* Item tooltip */
     #item-tooltip {
       position: absolute;
@@ -722,7 +773,8 @@
         <div><span class="key">Mouse</span> Aim</div>
         <div><span class="key">Click</span> Shoot</div>
         <div><span class="key">Space</span> Use ability</div>
-        <div><span class="key">F</span> Interact (portals/loot)</div>
+        <div><span class="key">F</span> Enter portal</div>
+        <div><span class="key">G</span> Pickup loot</div>
         <div><span class="key">R</span> Return to Nexus</div>
         <div><span class="key">Q/E</span> Rotate camera</div>
         <div><span class="key">Z</span> Reset camera</div>
@@ -756,6 +808,12 @@
       <div class="loot-popup-title">Loot Bag</div>
       <div id="loot-items"></div>
       <div class="loot-close-hint">Click item to pick up | Walk away to close</div>
+    </div>
+
+    <div id="vault-panel" class="hidden">
+      <div class="vault-title">Vault</div>
+      <div id="vault-grid"></div>
+      <div class="vault-hint">Click vault slot, then inventory to transfer</div>
     </div>
 
     <div id="login-screen" class="hidden">

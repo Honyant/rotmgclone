@@ -4,7 +4,7 @@ import { Entity } from './Entity.js';
 export class PortalEntity extends Entity implements Portal {
   type: 'portal' = 'portal';
   targetInstance: string;
-  targetType: 'nexus' | 'realm' | 'dungeon';
+  targetType: 'nexus' | 'realm' | 'dungeon' | 'vault';
   name: string;
 
   // Expiration support for dungeon portals
@@ -14,7 +14,7 @@ export class PortalEntity extends Entity implements Portal {
   constructor(
     position: Vec2,
     targetInstance: string,
-    targetType: 'nexus' | 'realm' | 'dungeon',
+    targetType: 'nexus' | 'realm' | 'dungeon' | 'vault',
     name: string,
     lifetime?: number // in seconds
   ) {

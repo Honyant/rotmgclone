@@ -14,8 +14,10 @@ import type {
   Vec2,
   TileType,
   PlayerDeathStats,
+  VaultOpenEvent,
+  VaultUpdateEvent,
 } from '@rotmg/shared';
-import { ITEMS, WEAPONS, ARMORS, ABILITIES, RINGS, getExpForLevel, MAX_LEVEL } from '@rotmg/shared';
+import { ITEMS, WEAPONS, ARMORS, ABILITIES, RINGS, getExpForLevel, MAX_LEVEL, VAULT_CHEST_INTERACT_RANGE } from '@rotmg/shared';
 
 type GameState = 'connecting' | 'login' | 'character_select' | 'playing' | 'dead';
 
@@ -57,6 +59,12 @@ export class Game {
   private canDismissDeathScreen: boolean = false;
   private deathScreenKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
+  // Vault
+  private vaultPanel: HTMLElement;
+  private vaultOpen: boolean = false;
+  private vaultItems: (string | null)[] = [];
+  private selectedVaultSlot: number | null = null;
+
   constructor() {
     this.gameContainer = document.getElementById('game-container')!;
 
@@ -73,6 +81,7 @@ export class Game {
     this.itemTooltip = document.getElementById('item-tooltip')!;
     this.controlsOverlay = document.getElementById('controls-overlay')!;
     this.deathScreen = document.getElementById('death-screen')!;
+    this.vaultPanel = document.getElementById('vault-panel')!;
 
     // Determine WebSocket URL
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -183,6 +192,10 @@ export class Game {
         this.playerId = event.playerId;
         this.setState('playing');
         this.renderer.setMapData(event.mapWidth, event.mapHeight, event.mapTiles);
+        // Close vault UI when changing instances
+        if (this.vaultOpen) {
+          this.closeVaultUI();
+        }
       },
 
       onSnapshot: (snapshot) => {
@@ -217,6 +230,14 @@ export class Game {
 
       onChat: (event) => {
         this.addChatMessage(event.sender, event.message);
+      },
+
+      onVaultOpen: (event) => {
+        this.openVaultUI(event.vaultItems);
+      },
+
+      onVaultUpdate: (event) => {
+        this.updateVaultUI(event.vaultItems);
       },
 
       onError: (message) => {
@@ -335,6 +356,7 @@ export class Game {
   }
 
   private setupInput(): void {
+    // F key - Enter portals
     this.input.setInteractHandler(() => {
       if (this.state !== 'playing' || !this.lastSnapshot) return;
 
@@ -352,6 +374,14 @@ export class Game {
           return;
         }
       }
+    });
+
+    // G key - Pickup loot
+    this.input.setPickupHandler(() => {
+      if (this.state !== 'playing' || !this.lastSnapshot) return;
+
+      const localPlayer = this.lastSnapshot.players.find((p) => p.id === this.playerId);
+      if (!localPlayer) return;
 
       // Check for nearby loot
       for (const loot of this.lastSnapshot.loots) {
@@ -375,6 +405,7 @@ export class Game {
       if (this.state !== 'playing') return;
       this.network.useAbility();
     });
+
   }
 
   private setState(newState: GameState): void {
@@ -588,8 +619,19 @@ export class Game {
       return;
     }
 
+    // If vault slot is selected and clicking on inventory slot, transfer vault -> inventory
+    if (this.vaultOpen && this.selectedVaultSlot !== null && slotIndex >= 4 && slotIndex < 12) {
+      const invSlot = slotIndex - 4;
+      this.network.vaultTransfer(true, this.selectedVaultSlot, invSlot);
+      this.selectedVaultSlot = null;
+      this.selectedSlot = null;
+      this.updateInventoryAndVault();
+      return;
+    }
+
     if (this.selectedSlot === null) {
       this.selectedSlot = slotIndex;
+      this.selectedVaultSlot = null; // Deselect vault when selecting inventory
     } else if (this.selectedSlot === slotIndex) {
       this.selectedSlot = null;
     } else {
@@ -601,6 +643,9 @@ export class Game {
       if (localPlayer) {
         this.updateInventoryUI(localPlayer);
       }
+    }
+    if (this.vaultOpen) {
+      this.renderVaultUI();
     }
   }
 
@@ -773,6 +818,172 @@ export class Game {
       this.currentLootBag = null;
       this.lootPopup.classList.add('hidden');
     }
+  }
+
+  private openVaultUI(vaultItems: (string | null)[]): void {
+    this.vaultItems = vaultItems;
+    this.vaultOpen = true;
+    this.selectedVaultSlot = null;
+    this.selectedSlot = null;
+    this.renderVaultUI();
+    this.vaultPanel.classList.remove('hidden');
+  }
+
+  private updateVaultUI(vaultItems: (string | null)[]): void {
+    this.vaultItems = vaultItems;
+    if (this.vaultOpen) {
+      this.renderVaultUI();
+    }
+  }
+
+  private closeVaultUI(): void {
+    if (this.vaultOpen) {
+      this.vaultOpen = false;
+      this.selectedVaultSlot = null;
+      this.vaultPanel.classList.add('hidden');
+      this.network.closeVault();
+    }
+  }
+
+  private renderVaultUI(): void {
+    const vaultGrid = document.getElementById('vault-grid')!;
+    vaultGrid.innerHTML = '';
+
+    for (let i = 0; i < this.vaultItems.length; i++) {
+      const slot = this.createVaultSlotElement(i, this.vaultItems[i]);
+      vaultGrid.appendChild(slot);
+    }
+  }
+
+  private createVaultSlotElement(slotIndex: number, itemId: string | null): HTMLElement {
+    const slot = document.createElement('div');
+    slot.className = 'vault-slot';
+    slot.dataset.slot = String(slotIndex);
+
+    if (itemId) {
+      const item = ITEMS[itemId];
+      slot.style.backgroundColor = item?.color || '#444';
+      slot.title = item ? `${item.name} (T${item.tier})\n${item.description}` : itemId;
+      slot.textContent = item?.type[0].toUpperCase() || '?';
+    } else {
+      slot.textContent = String(slotIndex + 1);
+      slot.style.color = '#555';
+    }
+
+    if (this.selectedVaultSlot === slotIndex) {
+      slot.style.outline = '2px solid #ffd700';
+      slot.style.outlineOffset = '-2px';
+    }
+
+    slot.style.cursor = 'pointer';
+
+    // Click handler
+    slot.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleVaultSlotClick(slotIndex);
+    }, { capture: true });
+
+    // Block mouse events
+    slot.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, { capture: true });
+
+    // Hover for tooltip
+    slot.addEventListener('mouseenter', () => {
+      if (itemId) {
+        this.updateItemTooltip(itemId);
+      }
+    });
+    slot.addEventListener('mouseleave', () => {
+      this.updateItemTooltip(null);
+    });
+
+    return slot;
+  }
+
+  private handleVaultSlotClick(slotIndex: number): void {
+    // If inventory slot is selected, transfer from inventory to vault
+    if (this.selectedSlot !== null && this.selectedSlot >= 4 && this.selectedSlot < 12) {
+      const invSlot = this.selectedSlot - 4;
+      this.network.vaultTransfer(false, invSlot, slotIndex);
+      this.selectedSlot = null;
+      this.selectedVaultSlot = null;
+      this.updateInventoryAndVault();
+      return;
+    }
+
+    // If another vault slot is selected, swap within vault (not supported, just deselect)
+    if (this.selectedVaultSlot !== null && this.selectedVaultSlot !== slotIndex) {
+      this.selectedVaultSlot = slotIndex;
+      this.renderVaultUI();
+      return;
+    }
+
+    // If same slot clicked, deselect
+    if (this.selectedVaultSlot === slotIndex) {
+      this.selectedVaultSlot = null;
+      this.renderVaultUI();
+      return;
+    }
+
+    // Select this vault slot
+    this.selectedVaultSlot = slotIndex;
+    this.selectedSlot = null; // Deselect inventory
+    this.renderVaultUI();
+    if (this.lastSnapshot) {
+      const localPlayer = this.lastSnapshot.players.find((p) => p.id === this.playerId);
+      if (localPlayer) {
+        this.updateInventoryUI(localPlayer);
+      }
+    }
+  }
+
+  private updateInventoryAndVault(): void {
+    if (this.lastSnapshot) {
+      const localPlayer = this.lastSnapshot.players.find((p) => p.id === this.playerId);
+      if (localPlayer) {
+        this.updateInventoryUI(localPlayer);
+      }
+    }
+    if (this.vaultOpen) {
+      this.renderVaultUI();
+    }
+  }
+
+  private nearVaultChest: boolean = false;
+
+  private updateVaultProximity(): void {
+    if (!this.lastSnapshot || this.state !== 'playing') return;
+
+    const localPlayer = this.lastSnapshot.players.find((p) => p.id === this.playerId);
+    if (!localPlayer) return;
+
+    // Check for nearby vault chests
+    let isNearChest = false;
+    for (const chest of this.lastSnapshot.vaultChests) {
+      const dx = chest.position.x - localPlayer.position.x;
+      const dy = chest.position.y - localPlayer.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < VAULT_CHEST_INTERACT_RANGE) {
+        isNearChest = true;
+        break;
+      }
+    }
+
+    // Auto-open vault when approaching chest
+    if (isNearChest && !this.nearVaultChest && !this.vaultOpen) {
+      this.network.interactVaultChest();
+    }
+
+    // Auto-close vault when moving away
+    if (!isNearChest && this.nearVaultChest && this.vaultOpen) {
+      this.closeVaultUI();
+    }
+
+    this.nearVaultChest = isNearChest;
   }
 
   private playLevelUpAnimation(newLevel: number): void {
@@ -972,6 +1183,7 @@ export class Game {
       // Render with interpolation using deltaTime
       this.renderer.render(deltaTime);
       this.updateLootPopup();
+      this.updateVaultProximity();
 
       // Show/hide controls overlay when H is held
       this.controlsOverlay.classList.toggle('hidden', !this.input.isKeyDown('h'));

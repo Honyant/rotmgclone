@@ -1,5 +1,5 @@
 // Entity Types
-export type EntityType = 'player' | 'enemy' | 'projectile' | 'loot' | 'portal';
+export type EntityType = 'player' | 'enemy' | 'projectile' | 'loot' | 'portal' | 'vault_chest';
 
 export interface Vec2 {
   x: number;
@@ -63,8 +63,12 @@ export interface Loot extends Entity {
 export interface Portal extends Entity {
   type: 'portal';
   targetInstance: string;
-  targetType: 'nexus' | 'realm' | 'dungeon';
+  targetType: 'nexus' | 'realm' | 'dungeon' | 'vault';
   name: string;
+}
+
+export interface VaultChest extends Entity {
+  type: 'vault_chest';
 }
 
 // Network Messages
@@ -84,7 +88,10 @@ export type ClientMessage =
   | { type: 'register'; data: { username: string; password: string } }
   | { type: 'createCharacter'; data: { classId: string } }
   | { type: 'selectCharacter'; data: { characterId: string } }
-  | { type: 'chat'; data: { message: string } };
+  | { type: 'chat'; data: { message: string } }
+  | { type: 'interactVaultChest' }
+  | { type: 'vaultTransfer'; data: { fromVault: boolean; fromSlot: number; toSlot: number } }
+  | { type: 'closeVault' };
 
 export type ServerMessage =
   | { type: 'snapshot'; data: WorldSnapshot }
@@ -98,7 +105,9 @@ export type ServerMessage =
   | { type: 'characterList'; data: CharacterListData }
   | { type: 'instanceChange'; data: InstanceChangeEvent }
   | { type: 'chat'; data: ChatEvent }
-  | { type: 'error'; data: { message: string } };
+  | { type: 'error'; data: { message: string } }
+  | { type: 'vaultOpen'; data: VaultOpenEvent }
+  | { type: 'vaultUpdate'; data: VaultUpdateEvent };
 
 export interface PlayerInput {
   moveDirection: Vec2; // normalized or zero
@@ -114,12 +123,13 @@ export interface WorldSnapshot {
   tick: number;
   timestamp: number;
   instanceId: string;
-  instanceType: 'nexus' | 'realm' | 'dungeon';
+  instanceType: 'nexus' | 'realm' | 'dungeon' | 'vault';
   players: PlayerSnapshot[];
   enemies: EnemySnapshot[];
   projectiles: ProjectileSnapshot[];
   loots: LootSnapshot[];
   portals: PortalSnapshot[];
+  vaultChests: VaultChestSnapshot[];
 }
 
 export interface PlayerSnapshot {
@@ -170,9 +180,14 @@ export interface LootSnapshot {
 export interface PortalSnapshot {
   id: string;
   position: Vec2;
-  targetType: 'nexus' | 'realm' | 'dungeon';
+  targetType: 'nexus' | 'realm' | 'dungeon' | 'vault';
   name: string;
   visible: boolean;
+}
+
+export interface VaultChestSnapshot {
+  id: string;
+  position: Vec2;
 }
 
 export interface DamageEvent {
@@ -249,12 +264,20 @@ export interface CharacterData {
 
 export interface InstanceChangeEvent {
   instanceId: string;
-  instanceType: 'nexus' | 'realm' | 'dungeon';
+  instanceType: 'nexus' | 'realm' | 'dungeon' | 'vault';
   spawnPosition: Vec2;
   playerId: string;
   mapWidth: number;
   mapHeight: number;
   mapTiles: number[];
+}
+
+export interface VaultOpenEvent {
+  vaultItems: (string | null)[];
+}
+
+export interface VaultUpdateEvent {
+  vaultItems: (string | null)[];
 }
 
 export interface ChatEvent {

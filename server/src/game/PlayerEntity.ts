@@ -121,7 +121,7 @@ export class PlayerEntity extends Entity implements Player {
     // HP regeneration (vitality based)
     const effectiveMaxHp = this.getEffectiveMaxHp();
     if (this.hp < effectiveMaxHp) {
-      this.hpRegenAccum += (1 + this.vitality * 0.12) * deltaTime;
+      this.hpRegenAccum += (1 + this.getEffectiveVitality() * 0.12) * deltaTime;
       if (this.hpRegenAccum >= 1) {
         const regen = Math.floor(this.hpRegenAccum);
         this.hp = Math.min(effectiveMaxHp, this.hp + regen);
@@ -132,7 +132,7 @@ export class PlayerEntity extends Entity implements Player {
     // MP regeneration (wisdom based)
     const effectiveMaxMp = this.getEffectiveMaxMp();
     if (this.mp < effectiveMaxMp) {
-      this.mpRegenAccum += (0.5 + this.wisdom * 0.06) * deltaTime;
+      this.mpRegenAccum += (0.5 + this.getEffectiveWisdom() * 0.06) * deltaTime;
       if (this.mpRegenAccum >= 1) {
         const regen = Math.floor(this.mpRegenAccum);
         this.mp = Math.min(effectiveMaxMp, this.mp + regen);
@@ -150,8 +150,53 @@ export class PlayerEntity extends Entity implements Player {
     if (!weapon) return false;
 
     const now = Date.now();
-    const fireInterval = 1000 / weapon.rateOfFire;
+    // Dexterity increases attack speed: each point adds ~1.5% attack speed
+    const dexMultiplier = 1 + (this.getEffectiveDexterity() * 0.015);
+    const effectiveRateOfFire = weapon.rateOfFire * dexMultiplier;
+    const fireInterval = 1000 / effectiveRateOfFire;
     return now - this.lastShootTime >= fireInterval;
+  }
+
+  getEffectiveDexterity(): number {
+    let dexterity = this.dexterity;
+
+    const ringId = this.equipment[3];
+    if (ringId && RINGS[ringId]?.stats.dexterity) {
+      dexterity += RINGS[ringId].stats.dexterity;
+    }
+
+    // Apply buff bonuses
+    dexterity += this.getBuffBonus('dexterity');
+
+    return dexterity;
+  }
+
+  getEffectiveVitality(): number {
+    let vitality = this.vitality;
+
+    const ringId = this.equipment[3];
+    if (ringId && RINGS[ringId]?.stats.vitality) {
+      vitality += RINGS[ringId].stats.vitality;
+    }
+
+    // Apply buff bonuses
+    vitality += this.getBuffBonus('vitality');
+
+    return vitality;
+  }
+
+  getEffectiveWisdom(): number {
+    let wisdom = this.wisdom;
+
+    const ringId = this.equipment[3];
+    if (ringId && RINGS[ringId]?.stats.wisdom) {
+      wisdom += RINGS[ringId].stats.wisdom;
+    }
+
+    // Apply buff bonuses
+    wisdom += this.getBuffBonus('wisdom');
+
+    return wisdom;
   }
 
   getWeapon() {
@@ -220,6 +265,13 @@ export class PlayerEntity extends Entity implements Player {
   getEffectiveMaxHp(): number {
     let maxHp = this.maxHp;
 
+    // Add armor HP bonus
+    const armorId = this.equipment[2];
+    if (armorId && ARMORS[armorId]) {
+      maxHp += ARMORS[armorId].hpBonus;
+    }
+
+    // Add ring HP bonus
     const ringId = this.equipment[3];
     if (ringId && RINGS[ringId]?.stats.hp) {
       maxHp += RINGS[ringId].stats.hp;
@@ -231,6 +283,13 @@ export class PlayerEntity extends Entity implements Player {
   getEffectiveMaxMp(): number {
     let maxMp = this.maxMp;
 
+    // Add armor MP bonus
+    const armorId = this.equipment[2];
+    if (armorId && ARMORS[armorId]) {
+      maxMp += ARMORS[armorId].mpBonus;
+    }
+
+    // Add ring MP bonus
     const ringId = this.equipment[3];
     if (ringId && RINGS[ringId]?.stats.mp) {
       maxMp += RINGS[ringId].stats.mp;
@@ -277,8 +336,8 @@ export class PlayerEntity extends Entity implements Player {
     if (cls) {
       this.maxHp += cls.hpPerLevel;
       this.maxMp += cls.mpPerLevel;
-      this.hp = this.maxHp;
-      this.mp = this.maxMp;
+      this.hp = this.getEffectiveMaxHp();
+      this.mp = this.getEffectiveMaxMp();
       this.attack += cls.attackPerLevel;
       this.defense += cls.defensePerLevel;
       this.speed += cls.speedPerLevel;

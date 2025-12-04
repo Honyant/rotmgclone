@@ -6,8 +6,10 @@ export class InputManager {
   private mouseDown: boolean = false;
   private canvas: HTMLCanvasElement;
   private onInteract: (() => void) | null = null;
+  private onPickup: (() => void) | null = null;
   private onNexus: (() => void) | null = null;
   private onAbility: (() => void) | null = null;
+  private onVault: (() => void) | null = null;
 
   // Camera rotation
   private cameraRotation: number = 0; // radians
@@ -25,9 +27,14 @@ export class InputManager {
 
       this.keys.add(e.key.toLowerCase());
 
-      // Interact with F key
+      // Interact with portal using F key
       if (e.key.toLowerCase() === 'f') {
         this.onInteract?.();
+      }
+
+      // Pickup loot with G key
+      if (e.key.toLowerCase() === 'g') {
+        this.onPickup?.();
       }
 
       // Return to nexus with R key
@@ -39,6 +46,11 @@ export class InputManager {
       if (e.key === ' ') {
         e.preventDefault();
         this.onAbility?.();
+      }
+
+      // Interact with vault chest using V key
+      if (e.key.toLowerCase() === 'v') {
+        this.onVault?.();
       }
 
       // Reset camera rotation with Z
@@ -148,11 +160,19 @@ export class InputManager {
     this.onInteract = handler;
   }
 
+  setPickupHandler(handler: () => void): void {
+    this.onPickup = handler;
+  }
+
   setNexusHandler(handler: () => void): void {
     this.onNexus = handler;
   }
 
   setAbilityHandler(handler: () => void): void {
     this.onAbility = handler;
+  }
+
+  setVaultHandler(handler: () => void): void {
+    this.onVault = handler;
   }
 }

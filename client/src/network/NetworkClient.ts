@@ -11,6 +11,8 @@ import type {
   AbilityEffectEvent,
   InstanceChangeEvent,
   ChatEvent,
+  VaultOpenEvent,
+  VaultUpdateEvent,
 } from '@rotmg/shared';
 
 export type NetworkEventHandler = {
@@ -24,6 +26,8 @@ export type NetworkEventHandler = {
   onCharacterList?: (data: CharacterListData) => void;
   onInstanceChange?: (event: InstanceChangeEvent) => void;
   onChat?: (event: ChatEvent) => void;
+  onVaultOpen?: (event: VaultOpenEvent) => void;
+  onVaultUpdate?: (event: VaultUpdateEvent) => void;
   onError?: (message: string) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -126,6 +130,12 @@ export class NetworkClient {
       case 'abilityEffect':
         this.handlers.onAbilityEffect?.(message.data);
         break;
+      case 'vaultOpen':
+        this.handlers.onVaultOpen?.(message.data);
+        break;
+      case 'vaultUpdate':
+        this.handlers.onVaultUpdate?.(message.data);
+        break;
       case 'error':
         this.handlers.onError?.(message.data.message);
         break;
@@ -197,6 +207,18 @@ export class NetworkClient {
 
   sendChat(message: string): void {
     this.send({ type: 'chat', data: { message } });
+  }
+
+  interactVaultChest(): void {
+    this.send({ type: 'interactVaultChest' });
+  }
+
+  vaultTransfer(fromVault: boolean, fromSlot: number, toSlot: number): void {
+    this.send({ type: 'vaultTransfer', data: { fromVault, fromSlot, toSlot } });
+  }
+
+  closeVault(): void {
+    this.send({ type: 'closeVault' });
   }
 
   disconnect(): void {
