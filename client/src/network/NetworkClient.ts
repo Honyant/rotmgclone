@@ -19,7 +19,8 @@ export type NetworkEventHandler = {
   onDeath?: (event: DeathEvent) => void;
   onLevelUp?: (event: LevelUpEvent) => void;
   onAbilityEffect?: (event: AbilityEffectEvent) => void;
-  onAuthResult?: (success: boolean, accountId?: string, error?: string) => void;
+  onAuthResult?: (success: boolean, accountId?: string, token?: string, error?: string) => void;
+  onRegisterResult?: (success: boolean, message?: string, error?: string) => void;
   onCharacterList?: (data: CharacterListData) => void;
   onInstanceChange?: (event: InstanceChangeEvent) => void;
   onChat?: (event: ChatEvent) => void;
@@ -102,6 +103,14 @@ export class NetworkClient {
         this.handlers.onAuthResult?.(
           message.data.success,
           message.data.accountId,
+          message.data.token,
+          message.data.error
+        );
+        break;
+      case 'registerResult':
+        this.handlers.onRegisterResult?.(
+          message.data.success,
+          message.data.message,
           message.data.error
         );
         break;
@@ -131,7 +140,19 @@ export class NetworkClient {
 
   // Public send methods
   authenticate(username: string, password: string): void {
-    this.send({ type: 'auth', data: { token: `${username}:${password}` } });
+    this.send({ type: 'auth', data: { username, password } });
+  }
+
+  authenticateToken(token: string): void {
+    this.send({ type: 'authToken', data: { token } });
+  }
+
+  logout(token: string): void {
+    this.send({ type: 'logout', data: { token } });
+  }
+
+  register(username: string, password: string): void {
+    this.send({ type: 'register', data: { username, password } });
   }
 
   createCharacter(classId: string): void {

@@ -250,9 +250,9 @@ export class EnemyEntity extends Entity implements Enemy {
   }
 
   // Get all players who dealt enough damage to qualify for soulbound loot
-  // Threshold is 10% of max HP
+  // Threshold is 5% of max HP
   getQualifiedPlayers(): string[] {
-    const threshold = this.maxHp * 0.10;
+    const threshold = this.maxHp * 0.05;
     const qualified: string[] = [];
     for (const [playerId, damage] of this.damageByPlayer) {
       if (damage >= threshold) {

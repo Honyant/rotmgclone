@@ -78,7 +78,10 @@ export type ClientMessage =
   | { type: 'swapItems'; data: { from: number; to: number } }
   | { type: 'enterPortal'; data: { portalId: string } }
   | { type: 'returnToNexus' }
-  | { type: 'auth'; data: { token: string } }
+  | { type: 'auth'; data: { username: string; password: string } }
+  | { type: 'authToken'; data: { token: string } }
+  | { type: 'logout'; data: { token: string } }
+  | { type: 'register'; data: { username: string; password: string } }
   | { type: 'createCharacter'; data: { classId: string } }
   | { type: 'selectCharacter'; data: { characterId: string } }
   | { type: 'chat'; data: { message: string } };
@@ -91,6 +94,7 @@ export type ServerMessage =
   | { type: 'levelUp'; data: LevelUpEvent }
   | { type: 'abilityEffect'; data: AbilityEffectEvent }
   | { type: 'authResult'; data: AuthResult }
+  | { type: 'registerResult'; data: RegisterResult }
   | { type: 'characterList'; data: CharacterListData }
   | { type: 'instanceChange'; data: InstanceChangeEvent }
   | { type: 'chat'; data: ChatEvent }
@@ -220,6 +224,13 @@ export interface AbilityEffectEvent {
 export interface AuthResult {
   success: boolean;
   accountId?: string;
+  token?: string;
+  error?: string;
+}
+
+export interface RegisterResult {
+  success: boolean;
+  message?: string;
   error?: string;
 }
 

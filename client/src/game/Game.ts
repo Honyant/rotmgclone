@@ -103,23 +103,20 @@ export class Game {
     this.network.setHandlers({
       onConnect: () => {
         console.log('Connected to server');
-        // Try auto-login with saved credentials
-        const saved = localStorage.getItem('rotmg_credentials');
-        if (saved) {
-          try {
-            const { username, password } = JSON.parse(saved);
-            if (username && password) {
-              // Pre-fill inputs for reference
-              (document.getElementById('username-input') as HTMLInputElement).value = username;
-              (document.getElementById('password-input') as HTMLInputElement).value = password;
-              this.network.authenticate(username, password);
-              return;
-            }
-          } catch (e) {
-            localStorage.removeItem('rotmg_credentials');
+        // Try auto-login with saved session token
+        const savedToken = localStorage.getItem('rotmg_session_token');
+        if (savedToken) {
+          console.log('Attempting auto-login with saved session');
+          this.network.authenticateToken(savedToken);
+          // Don't show login screen yet, wait for auth result
+        } else {
+          // Pre-fill username if saved (password is NEVER stored for security)
+          const savedUsername = localStorage.getItem('rotmg_username');
+          if (savedUsername) {
+            (document.getElementById('username-input') as HTMLInputElement).value = savedUsername;
           }
+          this.setState('login');
         }
-        this.setState('login');
       },
 
       onDisconnect: () => {
@@ -127,19 +124,48 @@ export class Game {
         this.setState('connecting');
       },
 
-      onAuthResult: (success, accountId, error) => {
+      onAuthResult: (success, accountId, token, error) => {
+        const authMessage = document.getElementById('auth-message')!;
         if (success) {
           console.log('Authenticated as', accountId);
-          // Save credentials for auto-login
-          const username = (document.getElementById('username-input') as HTMLInputElement).value;
-          const password = (document.getElementById('password-input') as HTMLInputElement).value;
-          if (username && password) {
-            localStorage.setItem('rotmg_credentials', JSON.stringify({ username, password }));
+          authMessage.textContent = '';
+
+          // Save session token for persistent login
+          if (token) {
+            localStorage.setItem('rotmg_session_token', token);
+          }
+
+          // Save username for convenience
+          const usernameInput = document.getElementById('username-input') as HTMLInputElement;
+          if (usernameInput && usernameInput.value) {
+            localStorage.setItem('rotmg_username', usernameInput.value);
           }
         } else {
-          alert('Login failed: ' + error);
-          // Clear saved credentials on failure
-          localStorage.removeItem('rotmg_credentials');
+          // Clear invalid token on failed auth
+          localStorage.removeItem('rotmg_session_token');
+
+          authMessage.textContent = error || 'Login failed';
+          authMessage.style.color = '#ff6666';
+
+          // Show login screen if auto-login failed
+          if (this.state === 'connecting') {
+            const savedUsername = localStorage.getItem('rotmg_username');
+            if (savedUsername) {
+              (document.getElementById('username-input') as HTMLInputElement).value = savedUsername;
+            }
+            this.setState('login');
+          }
+        }
+      },
+
+      onRegisterResult: (success, message, error) => {
+        const authMessage = document.getElementById('auth-message')!;
+        if (success) {
+          authMessage.textContent = message || 'Registration successful! Please login.';
+          authMessage.style.color = '#66ff66';
+        } else {
+          authMessage.textContent = error || 'Registration failed';
+          authMessage.style.color = '#ff6666';
         }
       },
 
@@ -217,10 +243,44 @@ export class Game {
     document.getElementById('login-btn')!.addEventListener('click', () => {
       const username = (document.getElementById('username-input') as HTMLInputElement).value;
       const password = (document.getElementById('password-input') as HTMLInputElement).value;
+      const authMessage = document.getElementById('auth-message')!;
 
-      if (username && password) {
-        this.network.authenticate(username, password);
+      if (!username || !password) {
+        authMessage.textContent = 'Please enter username and password';
+        authMessage.style.color = '#ff6666';
+        return;
       }
+
+      authMessage.textContent = '';
+      this.network.authenticate(username, password);
+    });
+
+    // Register
+    document.getElementById('register-btn')!.addEventListener('click', () => {
+      const username = (document.getElementById('username-input') as HTMLInputElement).value;
+      const password = (document.getElementById('password-input') as HTMLInputElement).value;
+      const authMessage = document.getElementById('auth-message')!;
+
+      if (!username || !password) {
+        authMessage.textContent = 'Please enter username and password';
+        authMessage.style.color = '#ff6666';
+        return;
+      }
+
+      if (username.length < 3) {
+        authMessage.textContent = 'Username must be at least 3 characters';
+        authMessage.style.color = '#ff6666';
+        return;
+      }
+
+      if (password.length < 6) {
+        authMessage.textContent = 'Password must be at least 6 characters';
+        authMessage.style.color = '#ff6666';
+        return;
+      }
+
+      authMessage.textContent = '';
+      this.network.register(username, password);
     });
 
     // Character creation
@@ -231,14 +291,22 @@ export class Game {
 
     // Logout
     document.getElementById('logout-btn')!.addEventListener('click', () => {
-      // Clear saved credentials
-      localStorage.removeItem('rotmg_credentials');
+      // Get session token before clearing
+      const token = localStorage.getItem('rotmg_session_token');
+
+      // Clear session token to prevent auto-login
+      localStorage.removeItem('rotmg_session_token');
+
+      // Revoke session on server if token exists
+      if (token) {
+        this.network.logout(token);
+      }
+
       this.network.disconnect();
       this.characterList = null;
       this.playerId = null;
       this.lastSnapshot = null;
-      // Clear input fields
-      (document.getElementById('username-input') as HTMLInputElement).value = '';
+      // Clear only password field (username stays for convenience)
       (document.getElementById('password-input') as HTMLInputElement).value = '';
       this.setState('login');
       // Reconnect to allow new login

@@ -1,4 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import type { IncomingMessage } from 'http';
+import type { Duplex } from 'stream';
 import { v4 as uuid } from 'uuid';
 import { encode, decode } from '@msgpack/msgpack';
 import {
@@ -28,6 +30,8 @@ interface ClientSession {
   instanceId: string | null;
   lastInputTime: number;
   inputCount: number;
+  authAttempts: number;
+  lastAuthAttempt: number;
 }
 
 export class GameServer {
@@ -71,8 +75,22 @@ export class GameServer {
     );
     this.realmInstance.addPortal(nexusPortal);
 
-    // WebSocket server
-    this.wss = new WebSocketServer({ port });
+    // WebSocket server with origin validation
+    this.wss = new WebSocketServer({
+      port,
+      verifyClient: (info: { origin: string; secure: boolean; req: IncomingMessage }) => {
+        // Allow connections from localhost (dev) and production domain
+        const origin = info.origin || info.req.headers.origin;
+        const allowedOrigins = [
+          'http://localhost:3000',
+          'https://server.theanthonywang.com',
+          'http://server.theanthonywang.com'
+        ];
+
+        // Allow if no origin (direct WebSocket connection) or if origin is whitelisted
+        return !origin || allowedOrigins.includes(origin);
+      }
+    });
 
     this.wss.on('connection', (ws) => {
       this.handleConnection(ws);
@@ -90,6 +108,8 @@ export class GameServer {
       instanceId: null,
       lastInputTime: Date.now(),
       inputCount: 0,
+      authAttempts: 0,
+      lastAuthAttempt: 0,
     };
     this.clients.set(ws, session);
 
@@ -100,7 +120,13 @@ export class GameServer {
         if (data instanceof Buffer || data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
           message = decode(data instanceof Buffer ? data : new Uint8Array(data as ArrayBuffer)) as ClientMessage;
         } else {
-          message = JSON.parse(data.toString());
+          const parsed = JSON.parse(data.toString());
+          // Validate message has required 'type' property and isn't trying prototype pollution
+          if (!parsed || typeof parsed !== 'object' || !parsed.type || parsed.__proto__ || parsed.constructor) {
+            console.warn('Invalid message format or potential prototype pollution attempt');
+            return;
+          }
+          message = parsed as ClientMessage;
         }
         this.handleMessage(ws, session, message);
       } catch (e) {
@@ -134,7 +160,19 @@ export class GameServer {
 
     switch (message.type) {
       case 'auth':
-        this.handleAuth(ws, session, message.data.token);
+        this.handleAuth(ws, session, message.data.username, message.data.password);
+        break;
+
+      case 'authToken':
+        this.handleAuthToken(ws, session, message.data.token);
+        break;
+
+      case 'logout':
+        this.handleLogout(ws, session, message.data.token);
+        break;
+
+      case 'register':
+        this.handleRegister(ws, session, message.data.username, message.data.password);
         break;
 
       case 'createCharacter':
@@ -183,30 +221,70 @@ export class GameServer {
     }
   }
 
-  private async handleAuth(ws: WebSocket, session: ClientSession, token: string): Promise<void> {
-    // Token format: "username:password" for simplicity (use JWT in production)
-    const [username, password] = token.split(':');
+  private validateCredentials(username: string, password: string): { valid: boolean; error?: string } {
+    // Username validation
+    if (!username || username.length < 3 || username.length > 20) {
+      return { valid: false, error: 'Username must be 3-20 characters' };
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return { valid: false, error: 'Username can only contain letters, numbers, and underscores' };
+    }
 
-    if (!username || !password) {
-      this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid token format' } });
+    // Password validation
+    if (!password || password.length < 6 || password.length > 100) {
+      return { valid: false, error: 'Password must be 6-100 characters' };
+    }
+
+    return { valid: true };
+  }
+
+  private checkAuthRateLimit(session: ClientSession): boolean {
+    const now = Date.now();
+    // Reset counter after 1 minute
+    if (now - session.lastAuthAttempt > 60000) {
+      session.authAttempts = 0;
+    }
+    session.lastAuthAttempt = now;
+    session.authAttempts++;
+
+    // Max 5 auth attempts per minute
+    return session.authAttempts <= 5;
+  }
+
+  private async handleAuth(ws: WebSocket, session: ClientSession, username: string, password: string): Promise<void> {
+    // Rate limiting
+    if (!this.checkAuthRateLimit(session)) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Too many login attempts. Try again later.' } });
+      return;
+    }
+
+    // Basic validation (no min password length to support legacy accounts)
+    if (!username || username.length < 3 || username.length > 20) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid username or password' } });
+      return;
+    }
+    if (!password || password.length > 100) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid username or password' } });
       return;
     }
 
     // Try to login
-    let account = await this.database.validateLogin(username, password);
+    const account = await this.database.validateLogin(username, password);
 
-    // If login fails, try to create account
     if (!account) {
-      account = await this.database.createAccount(username, password);
-      if (!account) {
-        // Account exists but password is wrong
-        this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid credentials' } });
-        return;
-      }
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid username or password' } });
+      return;
+    }
+
+    // Create session token
+    const token = this.database.createSession(account.id);
+    if (!token) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Failed to create session' } });
+      return;
     }
 
     session.accountId = account.id;
-    this.send(ws, { type: 'authResult', data: { success: true, accountId: account.id } });
+    this.send(ws, { type: 'authResult', data: { success: true, accountId: account.id, token } });
 
     // Send character list
     const characters = this.database.getAliveCharactersByAccount(account.id);
@@ -223,6 +301,72 @@ export class GameServer {
         maxCharacters: 2,
       },
     });
+  }
+
+  private async handleAuthToken(ws: WebSocket, session: ClientSession, token: string): Promise<void> {
+    // Rate limiting
+    if (!this.checkAuthRateLimit(session)) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Too many login attempts. Try again later.' } });
+      return;
+    }
+
+    // Validate token
+    const account = this.database.validateSession(token);
+
+    if (!account) {
+      this.send(ws, { type: 'authResult', data: { success: false, error: 'Invalid or expired session' } });
+      return;
+    }
+
+    session.accountId = account.id;
+    this.send(ws, { type: 'authResult', data: { success: true, accountId: account.id, token } });
+
+    // Send character list
+    const characters = this.database.getAliveCharactersByAccount(account.id);
+    this.send(ws, {
+      type: 'characterList',
+      data: {
+        characters: characters.map((c) => ({
+          id: c.id,
+          name: c.name,
+          classId: c.classId,
+          level: c.level,
+          alive: c.alive,
+        })),
+        maxCharacters: 2,
+      },
+    });
+  }
+
+  private handleLogout(ws: WebSocket, session: ClientSession, token: string): void {
+    // Revoke the session token on the server
+    this.database.revokeSession(token);
+    console.log('Session revoked');
+  }
+
+  private async handleRegister(ws: WebSocket, session: ClientSession, username: string, password: string): Promise<void> {
+    // Rate limiting
+    if (!this.checkAuthRateLimit(session)) {
+      this.send(ws, { type: 'registerResult', data: { success: false, error: 'Too many attempts. Try again later.' } });
+      return;
+    }
+
+    // Validate credentials
+    const validation = this.validateCredentials(username, password);
+    if (!validation.valid) {
+      this.send(ws, { type: 'registerResult', data: { success: false, error: validation.error } });
+      return;
+    }
+
+    // Try to create account
+    const account = await this.database.createAccount(username, password);
+
+    if (!account) {
+      this.send(ws, { type: 'registerResult', data: { success: false, error: 'Username already taken' } });
+      return;
+    }
+
+    this.send(ws, { type: 'registerResult', data: { success: true, message: 'Account created! Please login.' } });
   }
 
   private async handleCreateCharacter(
@@ -516,6 +660,17 @@ export class GameServer {
     });
   }
 
+  private sanitizeHtml(text: string): string {
+    // Remove HTML tags and escape special characters
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;');
+  }
+
   private handleChat(session: ClientSession, message: string): void {
     if (!session.playerId || !session.instanceId) return;
 
@@ -525,9 +680,11 @@ export class GameServer {
     const player = instance.getPlayer(session.playerId);
     if (!player) return;
 
-    // Sanitize and limit message
-    const sanitized = message.slice(0, 200).trim();
-    if (!sanitized) return;
+    // Sanitize for XSS and limit message length
+    const trimmed = message.trim();
+    if (!trimmed || trimmed.length > 200) return;
+
+    const sanitized = this.sanitizeHtml(trimmed);
 
     // Broadcast to nearby players
     for (const [client, clientSession] of this.clients) {
@@ -535,7 +692,7 @@ export class GameServer {
         this.send(client, {
           type: 'chat',
           data: {
-            sender: player.name,
+            sender: this.sanitizeHtml(player.name),
             message: sanitized,
             timestamp: Date.now(),
           },
@@ -552,6 +709,9 @@ export class GameServer {
 
     const player = instance.getPlayer(session.playerId);
     if (!player) return;
+
+    // Prevent swapping same slot with itself (potential duplication exploit)
+    if (fromSlot === toSlot) return;
 
     // Slot mapping: 0-3 = equipment, 4-11 = inventory
     const getSlot = (slot: number): { array: (string | null)[]; index: number } | null => {

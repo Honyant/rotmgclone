@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuid } from 'uuid';
+import * as crypto from 'crypto';
 import { Account, Character, CLASSES, getStarterEquipment } from '@rotmg/shared';
 
 export class GameDatabase {
@@ -72,6 +73,20 @@ export class GameDatabase {
     `);
 
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id)`);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES accounts (id)
+      )
+    `);
+
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id)`);
   }
 
   save(): void {
@@ -120,20 +135,34 @@ export class GameDatabase {
       [username]
     );
 
-    if (result.length === 0 || result[0].values.length === 0) return null;
+    // Use a dummy hash if user doesn't exist to prevent timing attacks
+    // This ensures bcrypt.compare is always called, making timing consistent
+    const dummyHash = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'; // bcrypt hash of "dummy"
 
-    const row = result[0].values[0];
-    const passwordHash = row[2] as string;
+    let passwordHash: string;
+    let accountData: any = null;
 
+    if (result.length > 0 && result[0].values.length > 0) {
+      const row = result[0].values[0];
+      passwordHash = row[2] as string;
+      accountData = row;
+    } else {
+      // User doesn't exist - use dummy hash to maintain consistent timing
+      passwordHash = dummyHash;
+    }
+
+    // Always perform bcrypt comparison to prevent timing attacks
     const valid = await bcrypt.compare(password, passwordHash);
-    if (!valid) return null;
+
+    // Only return account if user exists AND password is valid
+    if (!valid || !accountData) return null;
 
     return {
-      id: row[0] as string,
-      username: row[1] as string,
-      passwordHash: row[2] as string,
-      createdAt: row[3] as number,
-      vaultItems: JSON.parse(row[4] as string),
+      id: accountData[0] as string,
+      username: accountData[1] as string,
+      passwordHash: accountData[2] as string,
+      createdAt: accountData[3] as number,
+      vaultItems: JSON.parse(accountData[4] as string),
     };
   }
 
@@ -155,6 +184,74 @@ export class GameDatabase {
       createdAt: row[3] as number,
       vaultItems: JSON.parse(row[4] as string),
     };
+  }
+
+  // Session methods
+  createSession(accountId: string): string | null {
+    if (!this.db) return null;
+
+    // Clean up expired sessions first
+    this.cleanupExpiredSessions();
+
+    // Generate cryptographically secure random token
+    const token = crypto.randomBytes(32).toString('hex');
+    const id = uuid();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + 30 * 24 * 60 * 60 * 1000; // 30 days
+
+    this.db.run(
+      `INSERT INTO sessions (id, account_id, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [id, accountId, token, expiresAt, createdAt]
+    );
+
+    return token;
+  }
+
+  validateSession(token: string): Account | null {
+    if (!this.db) return null;
+
+    const result = this.db.exec(
+      `SELECT s.account_id, s.expires_at, a.id, a.username, a.password_hash, a.created_at, a.vault_items
+       FROM sessions s
+       JOIN accounts a ON s.account_id = a.id
+       WHERE s.token = ?`,
+      [token]
+    );
+
+    if (result.length === 0 || result[0].values.length === 0) return null;
+
+    const row = result[0].values[0];
+    const expiresAt = row[1] as number;
+
+    // Check if token is expired
+    if (Date.now() > expiresAt) {
+      this.revokeSession(token);
+      return null;
+    }
+
+    return {
+      id: row[2] as string,
+      username: row[3] as string,
+      passwordHash: row[4] as string,
+      createdAt: row[5] as number,
+      vaultItems: JSON.parse(row[6] as string),
+    };
+  }
+
+  revokeSession(token: string): void {
+    if (!this.db) return;
+    this.db.run(`DELETE FROM sessions WHERE token = ?`, [token]);
+  }
+
+  revokeAllSessions(accountId: string): void {
+    if (!this.db) return;
+    this.db.run(`DELETE FROM sessions WHERE account_id = ?`, [accountId]);
+  }
+
+  cleanupExpiredSessions(): void {
+    if (!this.db) return;
+    const now = Date.now();
+    this.db.run(`DELETE FROM sessions WHERE expires_at < ?`, [now]);
   }
 
   // Character methods
