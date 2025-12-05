@@ -189,7 +189,7 @@ export const CLASSES: Record<string, ClassDefinition> = {
     hpPerLevel: 10,
     mpPerLevel: 2,
     attackPerLevel: 1,
-    defensePerLevel: 2,
+    defensePerLevel: 0,
     speedPerLevel: 1,
     dexterityPerLevel: 1,
     vitalityPerLevel: 2,
@@ -213,7 +213,7 @@ export const CLASSES: Record<string, ClassDefinition> = {
     hpPerLevel: 7,
     mpPerLevel: 3,
     attackPerLevel: 2,
-    defensePerLevel: 1,
+    defensePerLevel: 0,
     speedPerLevel: 2,
     dexterityPerLevel: 2,
     vitalityPerLevel: 1,
@@ -1459,7 +1459,7 @@ export function getStarterEquipment(classId: string): (string | null)[] {
 }
 
 export function getExpForLevel(level: number): number {
-  return Math.floor(100 * Math.pow(1.3, level - 1));
+  return Math.floor(100 * Math.pow(1.2, level - 1));
 }
 
 export const MAX_LEVEL = 20;
